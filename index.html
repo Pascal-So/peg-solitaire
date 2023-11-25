@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+
+<head>
+<meta charset="utf-8" />
+<title>Peg Solitaire</title>
+<style>
+
+html,
+body {
+    font-family: sans-serif;
+    color: white;
+    background-color: #222;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.game-grid {
+    display: grid;
+    position: relative;
+    width: calc((30px + 4px) * 7 - 4px);
+    grid-template-rows: repeat(7, max-content);
+    grid-template-columns: repeat(7, max-content);
+    gap: 4px;
+    margin: 30px auto;
+}
+
+.game-cell {
+    display: inline-block;
+    height: 30px;
+    width: 30px;
+    background-color: #3c3c3c;
+    border-radius: 50%;
+}
+
+.empty {
+    background: none;
+}
+
+button {
+    background: none;
+    border: 1px solid #ccc;
+    color: white;
+    border-radius: 5px;
+    margin: 0 3px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.peg {
+    height: 26px;
+    width: 26px;
+    margin: 2px;
+    border-radius: 50%;
+    position: absolute;
+    background-color: rgb(200, 200, 200);
+    top: 20px;
+    left: 30px;
+    transition: all 0.2s ease;
+    pointer-events: none
+}
+
+@keyframes pulsate {
+    0% { background-color: #3c3c3c; }
+    30% { background-color: #555; }
+    100% { background-color: #3c3c3c; }
+}
+
+.selected {
+    border: 3px solid #7d79fb;
+}
+
+.flash {
+    animation: pulsate 0.2s;
+}
+
+</style>
+</head>
+<body></body>
+</html>
