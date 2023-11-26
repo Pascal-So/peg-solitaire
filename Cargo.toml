@@ -11,3 +11,4 @@ colored = "2.0.4"
 log = "0.4.20"
 wasm-logger = "0.2.0"
 yew = { version = "0.21.0", features = ["csr"] }
+yew-hooks = "0.3.0"

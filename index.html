@@ -3,6 +3,7 @@
 
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Peg Solitaire</title>
 <style>
 
@@ -25,6 +26,9 @@ body {
     grid-template-columns: repeat(7, max-content);
     gap: 4px;
     margin: 30px auto;
+
+    transition: transform 0.2s;
+    transform-origin: top;
 }
 
 .game-cell {
@@ -47,6 +51,7 @@ button {
     margin: 0 3px;
     font-size: 13px;
     cursor: pointer;
+    transition: opacity 0.5s;
 }
 
 .peg {

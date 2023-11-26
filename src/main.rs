@@ -1,4 +1,5 @@
 use yew::prelude::*;
+use yew_hooks::prelude::*;
 
 fn coord_valid(&(x, y): &(i32, i32)) -> bool {
     x >= 2 && x <= 4 || y >= 2 && y <= 4
@@ -16,6 +17,10 @@ fn App() -> Html {
     let scale = |x: i32| x * 34;
 
     let selected = use_state(|| None);
+
+    let is_modified = use_state(|| false);
+
+    let display_scale = use_state(|| 1.0);
 
     let all_coords = (0..7)
         .flat_map(|y| (0..7).map(move |x| (x, y)))
@@ -47,15 +52,18 @@ fn App() -> Html {
 
     let reset = {
         let pegs = pegs.clone();
+        let is_modified = is_modified.clone();
         let original_pegs= compute_initial_pegs();
         Callback::from(move |_| {
             log::info!("reset");
             pegs.set(original_pegs.clone());
+            is_modified.set(false);
         })
     };
 
     let move_peg = Callback::from({
         let pegs = pegs.clone();
+        let is_modified = is_modified.clone();
         move |(src, dst): ((i32, i32), (i32, i32))| {
             let dx = dst.0 - src.0;
             let dy = dst.1 - src.1;
@@ -87,6 +95,8 @@ fn App() -> Html {
             let Some(middle_peg) = middle_peg else {
                 return;
             };
+
+            is_modified.set(true);
 
             middle_peg.alive = false;
             src_peg.coord = dst;
@@ -123,6 +133,7 @@ fn App() -> Html {
         }
     };
 
+
     let cell_classes = move |(x, y): (i32, i32)| {
         let mut classes = Classes::new();
         classes.push("game-cell");
@@ -138,9 +149,26 @@ fn App() -> Html {
         classes
     };
 
+    let window_size = use_window_size();
+    let debounced_size_update = {
+        let window_size = window_size.clone();
+        let display_scale = display_scale.clone();
+        use_debounce(
+            move || {
+                let new_scale = window_size.0.min(window_size.1) / 234.0 * 0.8;
+                display_scale.set(new_scale);
+            },
+            200,
+        )
+    };
+    use_memo(window_size, |_| {
+        debounced_size_update.run();
+        || {}
+    });
+
     html! {
-        <div class="game-grid">
-            <button style="grid-row: 1; grid-column: 1/3;" onclick={reset}>
+        <div class="game-grid" style={format!("transform: scale({})", *display_scale)}>
+            <button style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", if *is_modified {"1"} else {"0"})} onclick={reset}>
                 {"reset"}
             </button>
 
