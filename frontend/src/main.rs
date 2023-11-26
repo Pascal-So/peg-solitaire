@@ -1,10 +1,11 @@
 mod game_state;
 
+use common::Coord;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
-use crate::game_state::{Coord, GameState, LookupResult, HOLE_COORDS};
+use crate::game_state::{GameState, LookupResult, HOLE_COORDS};
 
 #[function_component]
 fn App() -> Html {

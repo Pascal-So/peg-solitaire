@@ -1,7 +1,4 @@
-pub const NR_HOLES: usize = 33;
-pub const NR_PEGS: usize = 32;
-
-pub type Coord = (i16, i16);
+use common::{Coord, NR_HOLES, NR_PEGS};
 
 #[rustfmt::skip]
 pub static HOLE_COORDS: [Coord; NR_HOLES] = [
@@ -92,7 +89,7 @@ impl GameState {
                 log::info!("dst already occupied");
                 return None;
             }
-        }            
+        }
 
         Some(MoveInfo {
             moved_idx: moved_idx?,
@@ -182,6 +179,17 @@ impl GameState {
             }
             self
         }
+    }
+
+    pub fn position_as_number(&self) -> u64 {
+        let mut out = 0;
+        for p in self.pegs.iter() {
+            if p.alive {
+                let idx = common::coordinate_to_index(p.coord);
+                out |= 1 << idx.expect("pegs should only have valid coordinates") as u64;
+            }
+        }
+        out
     }
 }
 
