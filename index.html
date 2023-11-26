@@ -65,7 +65,11 @@ button {
     top: 20px;
     left: 30px;
     transition: all 0.2s ease;
-    pointer-events: none
+    pointer-events: none;
+}
+
+.edit-mode .peg {
+    transition: opacity 0.2s ease;
 }
 
 @keyframes pulsate {
@@ -80,6 +84,10 @@ button {
 
 .flash {
     animation: pulsate 0.2s;
+}
+
+.edit-mode .game-cell {
+    border: 2.2px solid #3b603a;
 }
 
 </style>

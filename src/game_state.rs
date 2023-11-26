@@ -163,6 +163,26 @@ impl GameState {
 
         LookupResult::Empty
     }
+
+    pub fn edit_toggle_peg(mut self, coord: Coord) -> Self {
+        if let LookupResult::Peg(idx) = self.lookup(coord) {
+            self.pegs[idx].alive = false;
+            self.history.clear();
+            self.redo.clear();
+            self
+        } else {
+            for p in self.pegs.iter_mut() {
+                if !p.alive {
+                    p.alive = true;
+                    p.coord = coord;
+                    self.history.clear();
+                    self.redo.clear();
+                    break;
+                }
+            }
+            self
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
