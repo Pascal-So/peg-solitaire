@@ -22,8 +22,8 @@ body {
     display: grid;
     position: relative;
     width: calc((30px + 4px) * 7 - 4px);
-    grid-template-rows: repeat(7, max-content);
-    grid-template-columns: repeat(7, max-content);
+    grid-template-rows: repeat(7, min-content);
+    grid-template-columns: repeat(7, min-content);
     gap: 4px;
     margin: 30px auto;
 
@@ -39,8 +39,10 @@ body {
     border-radius: 50%;
 }
 
-.empty {
-    background: none;
+.icon {
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
 }
 
 button {
@@ -48,7 +50,6 @@ button {
     border: 1px solid #ccc;
     color: white;
     border-radius: 5px;
-    margin: 0 3px;
     font-size: 13px;
     cursor: pointer;
     transition: opacity 0.5s;

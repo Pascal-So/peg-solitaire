@@ -1,148 +1,95 @@
+mod game_state;
+
 use yew::prelude::*;
 use yew_hooks::prelude::*;
+use yew_icons::{Icon, IconId};
 
-fn coord_valid(&(x, y): &(i32, i32)) -> bool {
-    x >= 2 && x <= 4 || y >= 2 && y <= 4
-}
-
-#[derive(Clone, Copy)]
-struct Peg {
-    coord: (i32, i32),
-    key: u32,
-    alive: bool,
-}
+use crate::game_state::{Coord, GameState, LookupResult, HOLE_COORDS};
 
 #[function_component]
 fn App() -> Html {
-    let scale = |x: i32| x * 34;
+    let scale = |x: i16| x * 34;
+    let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 
+    let game_state = use_state(|| GameState::new());
     let selected = use_state(|| None);
-
-    let is_modified = use_state(|| false);
-
     let display_scale = use_state(|| 1.0);
 
-    let all_coords = (0..7)
-        .flat_map(|y| (0..7).map(move |x| (x, y)))
-        .collect::<Vec<_>>();
-    let valid_coords = all_coords
-        .iter()
-        .cloned()
-        .filter(coord_valid)
-        .collect::<Vec<_>>();
-
-    let compute_initial_pegs = || {
-        let mut key = 0;
-        valid_coords
-            .clone()
-            .into_iter()
-            .filter(|&c| c != (3, 3))
-            .map(|(x, y)| {
-                key += 1;
-                Peg {
-                    coord: (x, y),
-                    key,
-                    alive: true,
-                }
-            })
-            .collect::<Vec<_>>()
-    };
-
-    let pegs = use_state(|| compute_initial_pegs());
-
     let reset = {
-        let pegs = pegs.clone();
-        let is_modified = is_modified.clone();
-        let original_pegs= compute_initial_pegs();
+        let game_state = game_state.clone();
         Callback::from(move |_| {
             log::info!("reset");
-            pegs.set(original_pegs.clone());
-            is_modified.set(false);
+            game_state.set(GameState::new());
+        })
+    };
+
+    let undo = {
+        let game_state = game_state.clone();
+        Callback::from(move |_| {
+            if game_state.can_undo() {
+                log::info!("undo");
+                game_state.set(GameState::clone(&game_state).undo());
+            }
+        })
+    };
+
+    let redo = {
+        let game_state = game_state.clone();
+        Callback::from(move |_| {
+            if game_state.can_redo() {
+                log::info!("redo");
+                game_state.set(GameState::clone(&game_state).redo());
+            }
         })
     };
 
     let move_peg = Callback::from({
-        let pegs = pegs.clone();
-        let is_modified = is_modified.clone();
-        move |(src, dst): ((i32, i32), (i32, i32))| {
-            let dx = dst.0 - src.0;
-            let dy = dst.1 - src.1;
-
-            if !(dx.abs() == 2 && dy == 0 || dx == 0 && dy.abs() == 2) {
-                return;
-            }
-
-            let middle = ((src.0 + dst.0) / 2, (src.1 + dst.1) / 2);
-
-            let mut pegs_tmp = Vec::clone(&pegs);
-
-            let mut src_peg = None;
-            let mut middle_peg = None;
-            for peg in &mut pegs_tmp {
-                if !peg.alive {
-                    continue;
-                }
-                if peg.coord == src {
-                    src_peg = Some(peg);
-                } else if peg.coord == middle {
-                    middle_peg = Some(peg);
-                }
-            }
-
-            let Some(src_peg) = src_peg else {
+        let game_state = game_state.clone();
+        move |(src, dst): (Coord, Coord)| {
+            let Some(move_info) = game_state.check_move(src, dst) else {
                 return;
             };
-            let Some(middle_peg) = middle_peg else {
-                return;
-            };
-
-            is_modified.set(true);
-
-            middle_peg.alive = false;
-            src_peg.coord = dst;
             log::debug!("moving from {src:?} to {dst:?}");
-            pegs.set(pegs_tmp);
+            game_state.set(GameState::clone(&game_state).apply_move(move_info));
         }
     });
 
     let holeclick = {
         let selected = selected.clone();
-        let pegs = pegs.clone();
+        let game_state = game_state.clone();
         let move_peg = move_peg.clone();
 
-        move |&(x, y): &(i32, i32)| {
+        move |&coord: &Coord| {
             let selected = selected.clone();
-            let pegs: UseStateHandle<Vec<Peg>> = pegs.clone();
             let move_peg = move_peg.clone();
+            let game_state = game_state.clone();
 
             Callback::from(move |_: MouseEvent| {
-                if *selected == Some((x, y)) {
+                log::debug!("click {coord:?}");
+
+                if *selected == Some(coord) {
                     selected.set(None);
                     return;
                 }
+                log::debug!("selected {selected:?}");
 
-                let peg = pegs.iter().find(|&&p| (x, y) == p.coord && p.alive);
-
-                if let Some(p) = peg {
-                    selected.set(Some(p.coord));
-                } else if let Some((sx, sy)) = *selected {
-                    move_peg.emit(((sx, sy), (x, y)));
-                    selected.set(None);
+                match game_state.lookup(coord) {
+                    LookupResult::Invalid => {}
+                    LookupResult::Peg(_) => selected.set(Some(coord)),
+                    LookupResult::Empty => {
+                        if let Some(src) = *selected {
+                            move_peg.emit((src, coord));
+                            selected.set(None);
+                        }
+                    }
                 }
             })
         }
     };
 
-
-    let cell_classes = move |(x, y): (i32, i32)| {
+    let cell_classes = move |(x, y): Coord| {
         let mut classes = Classes::new();
         classes.push("game-cell");
-
-        let x_out = x < 2 || x > 4;
-        let y_out = y < 2 || y > 4;
-        if x_out && y_out {
-            classes.push("empty");
-        }
         if *selected == Some((x, y)) {
             classes.push("selected");
         }
@@ -155,7 +102,7 @@ fn App() -> Html {
         let display_scale = display_scale.clone();
         use_debounce(
             move || {
-                let new_scale = window_size.0.min(window_size.1) / 234.0 * 0.8;
+                let new_scale = window_size.0.min(window_size.1) / 234.0 * 0.9;
                 display_scale.set(new_scale);
             },
             200,
@@ -168,11 +115,17 @@ fn App() -> Html {
 
     html! {
         <div class="game-grid" style={format!("transform: scale({})", *display_scale)}>
-            <button style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", if *is_modified {"1"} else {"0"})} onclick={reset}>
+            <button style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", b2f(game_state.can_undo()))} onclick={reset}>
                 {"reset"}
             </button>
+            <button style={format!("grid-row: 2; grid-column: 1; opacity: {};", b2f(game_state.can_undo()))} onclick={undo}>
+                <Icon icon_id={IconId::LucideUndo2} class="icon"/>
+            </button>
+            <button style={format!("grid-row: 2; grid-column: 2; opacity: {};", b2f(game_state.can_redo()))} onclick={redo}>
+                <Icon icon_id={IconId::LucideRedo2} class="icon"/>
+            </button>
 
-            { for valid_coords.iter().map(|&(x, y)| html! {
+            { for HOLE_COORDS.iter().map(|&(x, y)| html! {
                 <div
                     class={cell_classes((x, y))}
                     onmousedown={holeclick(&(x, y))}
@@ -180,17 +133,17 @@ fn App() -> Html {
                 />
             }) }
 
-            { for pegs.iter().map(|p| {
+            { for game_state.pegs.iter().enumerate().map(|(i, p)| {
                 let left = scale(p.coord.0);
                 let top = scale(p.coord.1);
-                let op = if p.alive { 1.0 } else { 0.0 };
                 html!{
-                <div
-                    class="peg"
-                    key={p.key}
-                    style={format!("left: {left}px; top: {top}px; opacity: {op};")}
-                />
-            }}) }
+                    <div
+                        class="peg"
+                        key={i}
+                        style={format!("left: {left}px; top: {top}px; opacity: {};", b2f(p.alive))}
+                    />
+                }
+            }) }
         </div>
     }
 }

@@ -758,6 +758,7 @@ dependencies = [
  "wasm-logger",
  "yew",
  "yew-hooks",
+ "yew_icons",
 ]
 
 [[package]]
@@ -1358,4 +1359,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "yew_icons"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f97c8e4ff3b77038b96e7a456e9fcbe45ee11387654ff4c4a24461c38b214d1f"
+dependencies = [
+ "yew",
 ]
