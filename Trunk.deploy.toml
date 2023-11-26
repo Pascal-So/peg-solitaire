@@ -1,0 +1,6 @@
+[build]
+
+# This doesn't work for `trunk serve`, therefore the config has been renamed to `Trunk.deploy.toml`
+# so that it is only used for `trunk build`, and `trunk serve` uses the default of "/".
+# https://github.com/thedodd/trunk/issues/395#issuecomment-1474829618
+public_url = "./"
