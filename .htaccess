@@ -1,0 +1,55 @@
+# ----------------------------------------------------------------------
+# SERVE PRE-COMPRESSED STATIC FILES
+# ----------------------------------------------------------------------
+# This block enables serving pre-compressed .gz and .br files if they
+# exist and the client supports them. Brotli is preferred over Gzip.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Rule to serve Brotli (.br)
+  # 1. Check if the browser sent the "Accept-Encoding: br" header.
+  RewriteCond %{HTTP:Accept-Encoding} br
+  # 2. Check if a .br version of the requested file exists on the server.
+  RewriteCond %{REQUEST_FILENAME}.br -f
+  # 3. If both are true, rewrite the request to serve the .br file.
+  RewriteRule ^(.*)$ $1.br [L]
+
+  # Rule to serve Gzip (.gz) as a fallback
+  # 1. Check if the browser sent the "Accept-Encoding: gzip" header.
+  RewriteCond %{HTTP:Accept-Encoding} gzip
+  # 2. Check if a .gz version of the requested file exists on the server.
+  RewriteCond %{REQUEST_FILENAME}.gz -f
+  # 3. If both are true, rewrite the request to serve the .gz file.
+  RewriteRule ^(.*)$ $1.gz [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  # For the rules above to work, we must set the correct content encoding
+  # and content type headers for the compressed files.
+
+  # Serve .br files with the Brotli content encoding
+  <FilesMatch "\.br$">
+    Header set Content-Encoding br
+  </FilesMatch>
+
+  # Serve .gz files with the Gzip content encoding
+  <FilesMatch "\.gz$">
+    Header set Content-Encoding gzip
+  </FilesMatch>
+
+  # Set content type for the compressed binary file
+  <FilesMatch "\.bin\.(gz|br)$">
+    Header set Content-Type application/octet-stream
+  </FilesMatch>
+
+  # IMPORTANT: Add the Vary header to deal with caches/proxies.
+  # This tells caches that the response can be different based on the
+  # Accept-Encoding header, preventing them from serving a cached
+  # compressed version to a browser that doesn't support it.
+  <FilesMatch "\.(js|css|xml|gz|br|bin)$">
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+</IfModule>
+
+
