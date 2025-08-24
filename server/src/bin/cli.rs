@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     ops::Range,
     path::PathBuf,
     time::Instant,
@@ -604,8 +604,13 @@ fn evaluate_various_positions(filter: &BloomFilter) {
         nr_steps: &mut u64,
         end: Position,
         jumps: &[Jump; 76],
+        cache: &mut HashSet<Position>,
     ) -> Result {
         *nr_steps += 1;
+
+        if *nr_steps > 100000 {
+            return Result::TimeOut;
+        }
 
         for &jump in jumps {
             if pos.can_jump(jump) {
@@ -615,11 +620,11 @@ fn evaluate_various_positions(filter: &BloomFilter) {
                     return Result::Solved;
                 }
 
-                if !filter.query(next.normalize()) {
+                if !filter.query(next.normalize()) || cache.contains(&next.normalize()) {
                     continue;
                 }
 
-                let result = step(filter, next, nr_steps, end, jumps);
+                let result = step(filter, next, nr_steps, end, jumps, cache);
                 match result {
                     Result::TimeOut => return Result::TimeOut,
                     Result::Solved => return Result::Solved,
@@ -628,20 +633,92 @@ fn evaluate_various_positions(filter: &BloomFilter) {
             }
         }
 
+        // if (pos.0 + *nr_steps * 11) % 17 < 2 {
+        cache.insert(pos.normalize());
+        // }
+
         Result::NotSolved
     }
+
+    #[derive(PartialEq, Eq)]
+    enum Strategies {
+        DFS,
+        BFS,
+    }
+
+    let strategy = Strategies::BFS;
 
     let mut step_counts = vec![];
 
     for start_pos in start_positions {
         let mut nr_steps = 0;
+
         jumps.shuffle(&mut rng);
 
-        let solved = step(filter, start_pos, &mut nr_steps, end_pos, &jumps);
+        let solved = match strategy {
+            Strategies::DFS => {
+                let mut cache = HashSet::new();
+                step(
+                    filter,
+                    start_pos,
+                    &mut nr_steps,
+                    end_pos,
+                    &jumps,
+                    &mut cache,
+                )
+            }
+            Strategies::BFS => {
+                let mut max_size = 0;
+                let mut max_times_seen = 0;
+                let mut smallest_pos_seen = 999;
+                let mut queue = HashMap::new();
+                let mut next_queue = queue.clone();
+
+                queue.insert(start_pos, 1);
+
+                let solved = 'outer: loop {
+                    assert!(next_queue.is_empty());
+                    for (pos, times_seen) in queue.drain() {
+                        nr_steps += 1;
+                        if nr_steps > 1000000 {
+                            break 'outer Result::TimeOut;
+                        }
+
+                        smallest_pos_seen = smallest_pos_seen.min(pos.count());
+
+                        max_times_seen = max_times_seen.max(times_seen);
+
+                        for jump in jumps {
+                            if pos.can_jump(jump) {
+                                let next = pos.apply_jump(jump).normalize();
+                                if next == end_pos {
+                                    break 'outer Result::Solved;
+                                }
+
+                                if filter.query(next) {
+                                    *next_queue.entry(next).or_default() += 1;
+                                }
+                            }
+                        }
+                    }
+
+                    max_size = max_size.max(next_queue.len());
+
+                    std::mem::swap(&mut queue, &mut next_queue);
+                };
+
+                dbg!(max_size);
+                dbg!(max_times_seen);
+                dbg!(smallest_pos_seen);
+
+                solved
+            }
+        };
+
         match solved {
             Result::Solved => {}
             Result::NotSolved => panic!("puzzle was not solved using bloom filter"),
-            Result::TimeOut => panic!("timed out"),
+            Result::TimeOut => println!("timed out"),
         }
 
         step_counts.push(nr_steps);
@@ -680,8 +757,14 @@ fn get_random_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
 }
 
 fn main() {
-    // evaluate_various_positions(&BloomFilter::load_from_file("filter_173378771_norm.bin"));
-    // return;
+    // evaluate_various_positions(&BloomFilter::load_from_file(
+    //     "filters/filter_173378771_norm.bin",
+    // ));
+    evaluate_various_positions(&BloomFilter::load_from_file(
+        "filters/filter_083886080_norm.bin",
+    ));
+
+    return;
 
     let mut solver_steps = vec![];
 
