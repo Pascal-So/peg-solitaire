@@ -1,9 +1,4 @@
-mod solver;
-
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::{routing::get, Router};
 
 #[tokio::main]
 async fn main() {
@@ -14,3 +9,6 @@ async fn main() {
         .await
         .unwrap();
 }
+
+// #[axum::debug_handler]
+// async fn solve(
