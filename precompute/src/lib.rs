@@ -1,5 +1,4 @@
 pub mod solvable_positions;
-pub mod solver;
 
 pub fn compress_hash() -> Vec<u8> {
     vec![0, 1, 2, 3, 4, 5]

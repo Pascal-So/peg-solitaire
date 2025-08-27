@@ -1,24 +1,20 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     ops::Range,
     path::PathBuf,
     time::Instant,
 };
 
-use bitvec::bitbox;
-use bitvec::prelude::Lsb0;
 use primal::Primes;
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
-use server::{
-    solvable_positions::get_solvable_positions,
-    solver::{BloomFilter, Jump, Position, State, VisitMap, ALL_JUMPS},
-};
+use common::{BloomFilter, Jump, Position, VisitMap, ALL_JUMPS};
+use server::solvable_positions::get_solvable_positions;
 
 fn build_bloom_filter(size: usize, solvability_map: &VisitMap) -> BloomFilter {
     let start = Instant::now();
@@ -653,7 +649,7 @@ fn evaluate_various_positions(filter: &BloomFilter) {
         }
 
         for start_pos in start_positions.clone() {
-            let mut nr_steps = 0;
+            let mut nr_steps;
             let mut attempt = 0;
 
             loop {
@@ -748,39 +744,4 @@ fn main() {
         &solver_steps,
     )
     .unwrap();
-
-    return;
-
-    // let start = std::time::Instant::now();
-    // solve_with_filter(&filter);
-    // println!("elapsed: {}us", start.elapsed().as_micros());
-    let start = Position::default_start();
-    let end: Position = Position::default_end();
-
-    let len = start.count() - end.count();
-    if len < 0 {
-        return;
-    }
-    if len == 0 {
-        return;
-    }
-
-    return;
-
-    let mut last_explored = 0;
-    for len in 26..28 {
-        let mut map_2 = bitbox![u32, Lsb0; 0; 1usize<<33];
-        let mut state_2 = State {
-            explored: 0,
-            hash_skipped: 0,
-            path: vec![],
-        };
-        // let ok = search_inner(start, end, len, &mut map_2, &mut state_2);
-        println!(
-            "{len}: {: >10}  (+ {: >10})",
-            state_2.explored,
-            state_2.explored - last_explored
-        );
-        last_explored = state_2.explored;
-    }
 }

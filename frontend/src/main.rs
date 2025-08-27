@@ -9,11 +9,6 @@ use crate::game_state::{GameState, LookupResult, HOLE_COORDS};
 
 #[function_component]
 fn App() -> Html {
-    let bytes = include_bytes!(concat!(env!("OUT_DIR"), "/bloom-filter-compressed.bin"));
-    // println!("{:?}", bytes);
-    //
-    log::info!("bytes: {bytes:?}");
-
     let scale = |x: i16| x * 34;
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 

@@ -134,12 +134,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -199,6 +193,12 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "common"
 version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bitvec",
+ "rand",
+ "tempfile",
+]
 
 [[package]]
 name = "console_error_panic_hook"
@@ -293,7 +293,6 @@ version = "0.1.0"
 dependencies = [
  "common",
  "log",
- "server",
  "wasm-logger",
  "yew",
  "yew-hooks",
@@ -1072,6 +1071,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompute"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "common",
+ "log",
+ "primal",
+ "rand",
+ "rand_pcg",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "zopfli",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1386,27 +1403,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bincode 2.0.1",
- "bit-vec",
- "bitvec",
- "common",
- "log",
- "primal",
- "rand",
- "rand_pcg",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "zopfli",
 ]
 
 [[package]]

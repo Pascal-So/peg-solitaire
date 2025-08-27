@@ -1,4 +1,4 @@
-use crate::solver::Position;
+use common::Position;
 
 pub fn get_solvable_positions() -> Vec<Position> {
     vec![
