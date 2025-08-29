@@ -1,6 +1,7 @@
 mod game_state;
 
-use common::Coord;
+use common::{BloomFilter, Coord};
+use gloo_net::http::Request;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
@@ -16,6 +17,24 @@ fn App() -> Html {
     let selected = use_state(|| None);
     let display_scale = use_state(|| 1.0);
     let edit_mode = use_state(|| false);
+    let filter = use_state(|| None);
+
+    {
+        let filter = filter.clone();
+        use_effect_with((), move |_| {
+            let filter = filter.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let response = Request::get("http://localhost:8081/filter_173378771_norm.bin")
+                    .send()
+                    .await
+                    .unwrap();
+
+                let body = response.binary().await.unwrap();
+                let bloomfilter = BloomFilter::load_from_slice(&body);
+                filter.set(Some(bloomfilter));
+            });
+        });
+    }
 
     let reset = {
         let game_state = game_state.clone();
@@ -69,8 +88,6 @@ fn App() -> Html {
             let edit_mode = edit_mode.clone();
 
             Callback::from(move |_: MouseEvent| {
-                log::debug!("click {coord:?}");
-
                 if *edit_mode {
                     game_state.set(GameState::clone(&game_state).edit_toggle_peg(coord));
                     return;
@@ -80,7 +97,6 @@ fn App() -> Html {
                     selected.set(None);
                     return;
                 }
-                log::debug!("selected {selected:?}");
 
                 match game_state.lookup(coord) {
                     LookupResult::Invalid => {}
@@ -142,7 +158,7 @@ fn App() -> Html {
         })
     };
 
-    log::info!("Current game state: {}", game_state.position_as_number());
+    log::info!("Current position: {}", game_state.as_position().0);
 
     html! {
         <div class={overall_classes} style={format!("transform: scale({})", *display_scale)}>
@@ -171,6 +187,13 @@ fn App() -> Html {
             >
                 if *edit_mode {<>{"done"}</>} else {<>{"edit"}</>}
             </button>
+
+            <div
+                style="grid-row: 7; grid-column: 6/8; display: flex; align-items: baseline; justify-content: end"
+            >
+                <span style="font-size: 0.4rem">{"solvable: "}</span>
+                <span style="font-size: 0.8rem; padding-left: 0.2rem">{format!("{}", filter.as_ref().map_or("loading..", |filter| game_state.solvable(filter)))}</span>
+            </div>
 
             { for HOLE_COORDS.iter().map(|&(x, y)| html! {
                 <div

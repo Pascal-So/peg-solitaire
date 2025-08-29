@@ -10,3 +10,5 @@ yew = { version = "0.21.0", features = ["csr"] }
 yew-hooks = "0.3.0"
 yew_icons = { version = "0.8.0", features = ["LucideRedo2", "LucideUndo2"] }
 common = { path = "../common" }
+gloo-net = "0.6.0"
+wasm-bindgen-futures = "0.4.50"

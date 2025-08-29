@@ -1,4 +1,4 @@
-use common::{Coord, NR_HOLES, NR_PEGS};
+use common::{solve_with_bloom_filter, BloomFilter, Coord, Position, NR_HOLES, NR_PEGS};
 
 #[rustfmt::skip]
 pub static HOLE_COORDS: [Coord; NR_HOLES] = [
@@ -99,6 +99,18 @@ impl GameState {
         })
     }
 
+    pub fn nr_pegs(&self) -> i32 {
+        self.pegs.iter().filter(|peg| peg.alive).count() as i32
+    }
+
+    pub fn solvable(&self, filter: &BloomFilter) -> &str {
+        match solve_with_bloom_filter(self.as_position().normalize(), filter) {
+            common::SolveResult::Solved => "yes",
+            common::SolveResult::Unsolvable => "no",
+            common::SolveResult::TimedOut => "?",
+        }
+    }
+
     /// Only manipulate the peg positions, doesn't include history handling.
     fn apply_move_inner(mut self, mut move_info: MoveInfo, reverse: bool) -> Self {
         if reverse {
@@ -181,15 +193,16 @@ impl GameState {
         }
     }
 
-    pub fn position_as_number(&self) -> u64 {
+    pub fn as_position(&self) -> Position {
         let mut out = 0;
         for p in self.pegs.iter() {
             if p.alive {
-                let idx = common::coordinate_to_index(p.coord);
-                out |= 1 << idx.expect("pegs should only have valid coordinates") as u64;
+                let idx = common::coordinate_to_index(p.coord)
+                    .expect("pegs should only have valid coordinates");
+                out |= 1 << idx as u64;
             }
         }
-        out
+        Position(out)
     }
 }
 
@@ -197,4 +210,37 @@ impl GameState {
 pub struct Peg {
     pub coord: Coord,
     pub alive: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_position() {
+        let gs = GameState::new();
+
+        assert_eq!(gs.as_position(), Position::default_start());
+    }
+
+    #[test]
+    fn test_move() {
+        let gs = GameState::new();
+        let move_info = gs.check_move((5, 3), (3, 3)).unwrap();
+
+        let gs = gs.apply_move(move_info);
+        gs.as_position().print();
+
+        // TODO: The coordinates in GameState and Position appear to be mirrored, fix this at some point.
+        let expected = Position::from_ascii([
+            "    ###    ",
+            "    ###    ",
+            "  #######  ",
+            "  #..####  ",
+            "  #######  ",
+            "    ###    ",
+            "    ###    ",
+        ]);
+        assert_eq!(gs.as_position(), expected);
+    }
 }

@@ -1,5 +1,17 @@
 use common::Position;
 
+pub fn get_difficult_positions() -> Vec<Position> {
+    vec![
+        Position(8543069799),
+        Position(8585707375),
+        Position(3400906599),
+        Position(3699194879),
+        Position(6296427932),
+        Position(7897868249),
+        Position(6165560768),
+    ]
+}
+
 pub fn get_solvable_positions() -> Vec<Position> {
     vec![
         Position(7423917311),

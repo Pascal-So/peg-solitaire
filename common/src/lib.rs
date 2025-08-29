@@ -3,6 +3,8 @@ use std::path::Path;
 
 use bincode::config;
 use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
+use rand::{seq::SliceRandom, SeedableRng};
+use rand_pcg::Pcg64Mcg;
 
 pub const NR_HOLES: usize = 33;
 pub const NR_PEGS: usize = 32;
@@ -16,10 +18,6 @@ pub fn coordinate_to_index((x, y): Coord) -> Option<i16> {
         (5..=6, 2..=4) => Some((x - 2) + (y - 5) * 3 + 27),
         _ => None,
     }
-}
-
-pub struct VisitMap {
-    bits: BincodeBitBox,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -284,9 +282,10 @@ impl Position {
     }
 }
 
-#[cfg_attr(not(target_family = "wasm"), derive(bincode::Decode, bincode::Encode))]
+#[cfg_attr(not(target_family = "wasm"), derive(bincode::Encode))]
+#[derive(bincode::Decode)]
 pub struct BloomFilter {
-    nr_bits: usize,
+    nr_bits: u64, // invariant: this value always fits in u32
     bits: BincodeBitBox,
 }
 
@@ -295,34 +294,40 @@ impl Eq for BloomFilter {}
 impl PartialEq for BloomFilter {
     fn eq(&self, other: &Self) -> bool {
         let nr_bits = self.nr_bits;
-        self.nr_bits == other.nr_bits && self.bits.0[..nr_bits] == other.bits.0[..nr_bits]
+        self.nr_bits == other.nr_bits
+            && self.bits.0[..nr_bits as usize] == other.bits.0[..nr_bits as usize]
     }
 }
 
 impl BloomFilter {
-    pub fn new(nr_bits: usize) -> Self {
+    pub fn new(nr_bits: u32) -> Self {
         Self {
-            nr_bits,
-            bits: BincodeBitBox(bitbox![u32, Lsb0; 0; nr_bits]),
+            nr_bits: nr_bits as u64,
+            bits: BincodeBitBox(bitbox![u32, Lsb0; 0; nr_bits as usize]),
         }
     }
 
-    pub fn nr_bits(&self) -> usize {
+    pub fn nr_bits(&self) -> u64 {
         self.nr_bits
     }
 
-    pub fn hash(&self, position: Position) -> usize {
-        position.0 as usize % self.nr_bits()
+    pub fn hash(&self, position: Position) -> u64 {
+        position.0 as u64 % self.nr_bits()
     }
 
     pub fn insert(&mut self, position: Position) {
         let hash = self.hash(position);
-        self.bits.0.set(hash, true);
+        self.bits.0.set(hash as usize, true);
     }
 
     pub fn query(&self, position: Position) -> bool {
         let hash = self.hash(position);
-        *self.bits.0.get(hash).unwrap()
+        *self.bits.0.get(hash as usize).unwrap()
+    }
+
+    pub fn load_from_slice(data: &[u8]) -> Self {
+        let (filter, _) = bincode::decode_from_slice(data, bincode_config()).unwrap();
+        filter
     }
 }
 
@@ -340,7 +345,7 @@ impl BloomFilter {
 
     /// Load files that were written in the old format that does not store the
     /// number of bits.
-    pub fn load_from_old_file_with_nr_bits(path: impl AsRef<Path>, nr_bits: usize) -> Self {
+    pub fn load_from_old_file_with_nr_bits(path: impl AsRef<Path>, nr_bits: u32) -> Self {
         #[derive(bincode::Decode, bincode::Encode)]
         struct Old {
             bits: BincodeBitBox,
@@ -350,20 +355,22 @@ impl BloomFilter {
         let old: Old = bincode::decode_from_std_read(&mut file, bincode_config()).unwrap();
 
         Self {
-            nr_bits,
+            nr_bits: nr_bits as u64,
             bits: old.bits,
         }
     }
 }
 
-const BYTES_LIMIT: usize = (1 << 33) / 8 + 1024;
-
-fn bincode_config(
-) -> config::Configuration<config::LittleEndian, config::Fixint, config::Limit<BYTES_LIMIT>> {
+const BYTES_LIMIT_BLOOM_FILTER: usize = 50 * 1024 * 1024;
+fn bincode_config() -> config::Configuration<
+    config::LittleEndian,
+    config::Fixint,
+    config::Limit<BYTES_LIMIT_BLOOM_FILTER>,
+> {
     config::Configuration::default()
 }
 
-struct BincodeBitBox(pub BitBox<u32>);
+pub struct BincodeBitBox(pub BitBox<u32>);
 
 impl<'de, Context> bincode::BorrowDecode<'de, Context> for BincodeBitBox {
     fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
@@ -395,40 +402,71 @@ impl bincode::Encode for BincodeBitBox {
     }
 }
 
-impl VisitMap {
-    pub fn new() -> Self {
-        Self {
-            bits: BincodeBitBox(bitbox![u32, Lsb0; 0; 1usize << 33]),
+pub enum SolveResult {
+    Solved,
+    Unsolvable,
+    TimedOut,
+}
+
+pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResult {
+    const STEP_LIMIT: u32 = 120;
+    fn inner(
+        pos: Position,
+        filter: &BloomFilter,
+        end: Position,
+        nr_steps: &mut u32,
+        jumps: &[Jump; 76],
+    ) -> SolveResult {
+        *nr_steps += 1;
+        if *nr_steps > STEP_LIMIT {
+            return SolveResult::TimedOut;
         }
-    }
 
-    pub fn visit(&mut self, position: Position) {
-        self.bits.0.set(position.0 as usize, true);
-    }
+        for &jump in jumps {
+            if pos.can_jump(jump) {
+                let next = pos.apply_jump(jump);
+                if next == end {
+                    return SolveResult::Solved;
+                }
 
-    pub fn unvisit(&mut self, position: Position) {
-        self.bits.0.set(position.0 as usize, false);
-    }
+                if next.count() == 1 {
+                    continue;
+                }
 
-    pub fn is_visited(&self, position: Position) -> bool {
-        self.bits.0[position.0 as usize]
-    }
+                if !filter.query(next.normalize()) {
+                    continue;
+                }
 
-    pub fn save_to_file(&self, path: impl AsRef<Path>) {
-        let mut file = std::fs::File::create(path).unwrap();
-        bincode::encode_into_std_write(&self.bits, &mut file, bincode_config()).unwrap();
-    }
-
-    pub fn load_from_file(path: impl AsRef<Path>) -> Self {
-        let mut file = std::fs::File::open(path).unwrap();
-        Self {
-            bits: bincode::decode_from_std_read(&mut file, bincode_config()).unwrap(),
+                match inner(next, filter, end, nr_steps, jumps) {
+                    SolveResult::Solved => return SolveResult::Solved,
+                    SolveResult::Unsolvable => {}
+                    SolveResult::TimedOut => return SolveResult::TimedOut,
+                }
+            }
         }
+
+        SolveResult::Unsolvable
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = bool> + use<'_> {
-        self.bits.0.iter().by_vals()
+    if !filter.query(pos.normalize()) {
+        return SolveResult::Unsolvable;
     }
+
+    let mut jumps = ALL_JUMPS;
+    let mut rng = Pcg64Mcg::seed_from_u64(0);
+
+    let end = Position::default_end();
+    for _ in 0..200 {
+        match inner(pos, filter, end, &mut 0, &jumps) {
+            SolveResult::Solved => return SolveResult::Solved,
+            SolveResult::Unsolvable => return SolveResult::Unsolvable,
+            SolveResult::TimedOut => {}
+        }
+
+        jumps.shuffle(&mut rng);
+    }
+
+    SolveResult::TimedOut
 }
 
 #[cfg(test)]
