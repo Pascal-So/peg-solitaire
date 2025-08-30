@@ -13,22 +13,22 @@ use rand_pcg::Pcg64Mcg;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
-use common::{BloomFilter, Jump, Position, ALL_JUMPS};
+use common::{debruijn::de_bruijn_solvable, BloomFilter, Jump, Position, ALL_JUMPS};
 use precompute::{
     positions::{get_difficult_positions, get_solvable_positions},
     VisitMap,
 };
 
-fn build_bloom_filter(size: u32, solvability_map: &VisitMap) -> BloomFilter {
+fn build_bloom_filter(size: u32, solvability_map: &VisitMap, k: u32) -> BloomFilter {
     let start = Instant::now();
-    let filename = PathBuf::from(format!("filter_{size:0>9}_norm.bin"));
+    let filename = PathBuf::from(format!("filters/filter_{size:0>9}_{k}_norm.bin"));
     if filename.is_file() {
         let filter = BloomFilter::load_from_file(filename);
         println!("loaded filter {size} in {}s", start.elapsed().as_secs_f32());
         return filter;
     }
 
-    let mut filter = BloomFilter::new(size);
+    let mut filter = BloomFilter::new(size, k);
     for (pos, b) in solvability_map.iter().enumerate() {
         if b {
             let pos = Position(pos as u64).normalize();
@@ -42,15 +42,16 @@ fn build_bloom_filter(size: u32, solvability_map: &VisitMap) -> BloomFilter {
 }
 
 #[derive(Serialize, Clone)]
-struct CandidateSize {
+struct CandidateSpec {
     size: u32,
+    k: u32,
     size_category: String,
 }
 
 #[derive(Serialize)]
 struct SizeStats {
     #[serde(flatten)]
-    candidate: CandidateSize,
+    candidate: CandidateSpec,
     false_positives: u64,
     false_positives_in_one_past: u64,
 }
@@ -60,7 +61,7 @@ struct SizeStats {
 fn evaluate_false_positives(
     solvability_map: &VisitMap,
     one_past_map: &VisitMap,
-    filters: Vec<(&BloomFilter, CandidateSize)>,
+    filters: Vec<(&BloomFilter, CandidateSpec)>,
 ) -> Vec<SizeStats> {
     let start = Instant::now();
     let mut total_negatives: u64 = 0;
@@ -552,15 +553,16 @@ fn build_data_and_perform_false_positive_evaluation() {
     dbg!(count_normalized_solvability(&solvability_map));
     let one_past_map = build_one_past_solvable_map(&solvability_map);
 
-    let mut all_filters: Vec<(BloomFilter, CandidateSize)> = vec![];
+    let mut all_filters: Vec<(BloomFilter, CandidateSpec)> = vec![];
 
     for (candidate_sizes, category) in get_candidates_groups() {
         let results = candidate_sizes.par_iter().map(|&size| {
-            let filter = build_bloom_filter(size, &solvability_map);
+            let filter = build_bloom_filter(size, &solvability_map, 1);
             (
                 filter,
-                CandidateSize {
+                CandidateSpec {
                     size,
+                    k: 1,
                     size_category: category.clone(),
                 },
             )
@@ -581,6 +583,46 @@ fn build_data_and_perform_false_positive_evaluation() {
 
     println!("evaluated stats in {}s", start_time.elapsed().as_secs_f32());
     serde_json::to_writer_pretty(std::fs::File::create("data-MBrange.json").unwrap(), &stats)
+        .unwrap();
+}
+
+fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
+    let solvability_map = build_solvability_map();
+
+    dbg!(count_normalized_solvability(&solvability_map));
+    let one_past_map = build_one_past_solvable_map(&solvability_map);
+
+    let mut all_filters: Vec<(BloomFilter, CandidateSpec)> = vec![];
+
+    let candidates = prime_candidates(512 * 1024 * 8..42 * 1024 * 1024 * 8);
+    for k in 1..=4 {
+        let results = candidates.par_iter().map(|&size| {
+            let filter = build_bloom_filter(size, &solvability_map, k);
+            (
+                filter,
+                CandidateSpec {
+                    size,
+                    k,
+                    size_category: "prime".to_string(),
+                },
+            )
+        });
+
+        all_filters.append(&mut results.collect());
+    }
+
+    let start_time = Instant::now();
+    let chunks: Vec<_> = all_filters.chunks(8).collect();
+    let stats: Vec<_> = chunks
+        .par_iter()
+        .map(|candidates| {
+            let candidates = candidates.iter().map(|(c, s)| (c, s.clone())).collect();
+            evaluate_false_positives(&solvability_map, &one_past_map, candidates)
+        })
+        .collect();
+
+    println!("evaluated stats in {}s", start_time.elapsed().as_secs_f32());
+    serde_json::to_writer_pretty(std::fs::File::create("data-primes-k.json").unwrap(), &stats)
         .unwrap();
 }
 
@@ -753,6 +795,10 @@ fn evaluate_difficult_positions(filter: &BloomFilter) {
     let limit_per_attempt = 200;
 
     for start_pos in start_positions.clone() {
+        if !de_bruijn_solvable(start_pos) {
+            continue;
+        }
+
         start_pos.print();
 
         let mut nr_solved = 0;
@@ -852,6 +898,8 @@ fn get_random_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
 }
 
 fn main() {
+    build_data_and_perform_false_positive_evaluation_for_primes_with_k();
+    return;
     let prime_filter = BloomFilter::load_from_file("filters/filter_173378771_norm.bin");
     evaluate_difficult_positions(&prime_filter);
     // evaluate_various_positions(&BloomFilter::load_from_file(

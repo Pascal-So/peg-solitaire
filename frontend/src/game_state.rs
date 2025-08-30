@@ -1,4 +1,7 @@
-use common::{solve_with_bloom_filter, BloomFilter, Coord, Position, NR_HOLES, NR_PEGS};
+use common::{
+    debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Coord, Position, NR_HOLES,
+    NR_PEGS,
+};
 
 #[rustfmt::skip]
 pub static HOLE_COORDS: [Coord; NR_HOLES] = [
@@ -104,6 +107,10 @@ impl GameState {
     }
 
     pub fn solvable(&self, filter: &BloomFilter) -> &str {
+        let pos = self.as_position();
+        if !de_bruijn_solvable(pos) {
+            return "no!";
+        }
         match solve_with_bloom_filter(self.as_position().normalize(), filter) {
             common::SolveResult::Solved => "yes",
             common::SolveResult::Unsolvable => "no",

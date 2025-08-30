@@ -1,3 +1,6 @@
+pub mod debruijn;
+
+use std::hash::Hasher;
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
@@ -5,6 +8,9 @@ use bincode::config;
 use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
 use rand::{seq::SliceRandom, SeedableRng};
 use rand_pcg::Pcg64Mcg;
+use rustc_hash::FxHasher;
+
+use crate::debruijn::de_bruijn_solvable;
 
 pub const NR_HOLES: usize = 33;
 pub const NR_PEGS: usize = 32;
@@ -285,7 +291,8 @@ impl Position {
 #[cfg_attr(not(target_family = "wasm"), derive(bincode::Encode))]
 #[derive(bincode::Decode)]
 pub struct BloomFilter {
-    nr_bits: u64, // invariant: this value always fits in u32
+    nr_bits: u32,
+    k: u32,
     bits: BincodeBitBox,
 }
 
@@ -300,33 +307,57 @@ impl PartialEq for BloomFilter {
 }
 
 impl BloomFilter {
-    pub fn new(nr_bits: u32) -> Self {
-        Self {
-            nr_bits: nr_bits as u64,
+    pub fn new(nr_bits: u32, k: u32) -> Self {
+        let filter = Self {
+            nr_bits,
+            k,
             bits: BincodeBitBox(bitbox![u32, Lsb0; 0; nr_bits as usize]),
-        }
+        };
+        filter.check_valid_k();
+        filter
     }
 
-    pub fn nr_bits(&self) -> u64 {
+    /// The size of the bloom filter in bits
+    pub fn nr_bits(&self) -> u32 {
         self.nr_bits
     }
 
-    pub fn hash(&self, position: Position) -> u64 {
-        position.0 as u64 % self.nr_bits()
+    fn hashes(&self, pos: Position) -> impl Iterator<Item = usize> {
+        let mut hasher = FxHasher::default();
+        let nr_bits = self.nr_bits() as u64;
+
+        (0..self.k).map(move |_| {
+            hasher.write_u64(pos.0);
+            (hasher.finish() % nr_bits) as usize
+        })
     }
 
     pub fn insert(&mut self, position: Position) {
-        let hash = self.hash(position);
-        self.bits.0.set(hash as usize, true);
+        for hash in self.hashes(position) {
+            self.bits.0.set(hash, true);
+        }
     }
 
+    /// Check if a value is present in the filter.
+    ///
+    /// This may return false positives, but never false negatives.
     pub fn query(&self, position: Position) -> bool {
-        let hash = self.hash(position);
-        *self.bits.0.get(hash as usize).unwrap()
+        for hash in self.hashes(position) {
+            if !self.bits.0.get(hash).unwrap() {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn check_valid_k(&self) {
+        assert!(self.k > 0, "k must be at least 1",);
     }
 
     pub fn load_from_slice(data: &[u8]) -> Self {
-        let (filter, _) = bincode::decode_from_slice(data, bincode_config()).unwrap();
+        let (filter, _) =
+            bincode::decode_from_slice::<BloomFilter, _>(data, bincode_config()).unwrap();
+        filter.check_valid_k();
         filter
     }
 }
@@ -343,11 +374,10 @@ impl BloomFilter {
         bincode::decode_from_std_read(&mut file, bincode_config()).unwrap()
     }
 
-    /// Load files that were written in the old format that does not store the
-    /// number of bits.
-    pub fn load_from_old_file_with_nr_bits(path: impl AsRef<Path>, nr_bits: u32) -> Self {
+    pub fn load_from_old_format(path: impl AsRef<Path>) -> Self {
         #[derive(bincode::Decode, bincode::Encode)]
         struct Old {
+            nr_bits: u64,
             bits: BincodeBitBox,
         }
 
@@ -355,7 +385,8 @@ impl BloomFilter {
         let old: Old = bincode::decode_from_std_read(&mut file, bincode_config()).unwrap();
 
         Self {
-            nr_bits: nr_bits as u64,
+            nr_bits: old.nr_bits as u32,
+            k: 1,
             bits: old.bits,
         }
     }
@@ -409,6 +440,10 @@ pub enum SolveResult {
 }
 
 pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResult {
+    if !de_bruijn_solvable(pos) {
+        return SolveResult::Unsolvable;
+    }
+
     const STEP_LIMIT: u32 = 120;
     fn inner(
         pos: Position,
@@ -456,6 +491,10 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
     let mut rng = Pcg64Mcg::seed_from_u64(0);
 
     let end = Position::default_end();
+    if pos == end {
+        return SolveResult::Solved;
+    }
+
     for _ in 0..200 {
         match inner(pos, filter, end, &mut 0, &jumps) {
             SolveResult::Solved => return SolveResult::Solved,
@@ -650,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load_preserves_bloom_filter() {
-        let mut filter = BloomFilter::new(13);
+        let mut filter = BloomFilter::new(13, 1);
         filter.insert(Position(3));
         filter.insert(Position(5));
 
