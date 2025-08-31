@@ -322,36 +322,26 @@ impl BloomFilter {
         self.nr_bits
     }
 
-    fn hashes(&self, pos: Position) -> impl Iterator<Item = usize> {
-        let mut hasher = FxHasher::default();
+    fn hash(&self, pos: Position) -> usize {
         let nr_bits = self.nr_bits() as u64;
-
-        (0..self.k).map(move |_| {
-            hasher.write_u64(pos.0);
-            (hasher.finish() % nr_bits) as usize
-        })
+        (pos.0 as u64 % nr_bits) as usize
     }
 
     pub fn insert(&mut self, position: Position) {
-        for hash in self.hashes(position) {
-            self.bits.0.set(hash, true);
-        }
+        let hash = self.hash(position);
+        self.bits.0.set(hash, true);
     }
 
     /// Check if a value is present in the filter.
     ///
     /// This may return false positives, but never false negatives.
     pub fn query(&self, position: Position) -> bool {
-        for hash in self.hashes(position) {
-            if !self.bits.0.get(hash).unwrap() {
-                return false;
-            }
-        }
-        true
+        let hash = self.hash(position);
+        *self.bits.0.get(hash).unwrap()
     }
 
     fn check_valid_k(&self) {
-        assert!(self.k > 0, "k must be at least 1",);
+        assert_eq!(self.k, 1, "only k=1 supported currently",);
     }
 
     pub fn load_from_slice(data: &[u8]) -> Self {
@@ -372,23 +362,6 @@ impl BloomFilter {
     pub fn load_from_file(path: impl AsRef<Path>) -> Self {
         let mut file = std::fs::File::open(path).unwrap();
         bincode::decode_from_std_read(&mut file, bincode_config()).unwrap()
-    }
-
-    pub fn load_from_old_format(path: impl AsRef<Path>) -> Self {
-        #[derive(bincode::Decode, bincode::Encode)]
-        struct Old {
-            nr_bits: u64,
-            bits: BincodeBitBox,
-        }
-
-        let mut file = std::fs::File::open(path).unwrap();
-        let old: Old = bincode::decode_from_std_read(&mut file, bincode_config()).unwrap();
-
-        Self {
-            nr_bits: old.nr_bits as u32,
-            k: 1,
-            bits: old.bits,
-        }
     }
 }
 

@@ -1,0 +1,470 @@
+[
+  {
+    "size": 4194319,
+    "size_category": "prime",
+    "false_positives": 7706013755,
+    "false_positives_in_one_past": 196197338
+  },
+  {
+    "size": 5007601,
+    "size_category": "prime",
+    "false_positives": 8333624415,
+    "false_positives_in_one_past": 208546154
+  },
+  {
+    "size": 5978603,
+    "size_category": "prime",
+    "false_positives": 8245450780,
+    "false_positives_in_one_past": 206367576
+  },
+  {
+    "size": 7137859,
+    "size_category": "prime",
+    "false_positives": 8105586635,
+    "false_positives_in_one_past": 202796797
+  },
+  {
+    "size": 8521907,
+    "size_category": "prime",
+    "false_positives": 7880320085,
+    "false_positives_in_one_past": 197089088
+  },
+  {
+    "size": 10174319,
+    "size_category": "prime",
+    "false_positives": 7559333178,
+    "false_positives_in_one_past": 189398235
+  },
+  {
+    "size": 12147131,
+    "size_category": "prime",
+    "false_positives": 7210506007,
+    "false_positives_in_one_past": 180128275
+  },
+  {
+    "size": 14502463,
+    "size_category": "prime",
+    "false_positives": 6742706955,
+    "false_positives_in_one_past": 169025096
+  },
+  {
+    "size": 17314499,
+    "size_category": "prime",
+    "false_positives": 6245393369,
+    "false_positives_in_one_past": 156439831
+  },
+  {
+    "size": 20671811,
+    "size_category": "prime",
+    "false_positives": 5722132618,
+    "false_positives_in_one_past": 142744874
+  },
+  {
+    "size": 24680099,
+    "size_category": "prime",
+    "false_positives": 5161580337,
+    "false_positives_in_one_past": 128734045
+  },
+  {
+    "size": 29465591,
+    "size_category": "prime",
+    "false_positives": 4602765159,
+    "false_positives_in_one_past": 114196984
+  },
+  {
+    "size": 35178973,
+    "size_category": "prime",
+    "false_positives": 4060837249,
+    "false_positives_in_one_past": 101646117
+  },
+  {
+    "size": 42000191,
+    "size_category": "prime",
+    "false_positives": 3549602814,
+    "false_positives_in_one_past": 89098393
+  },
+  {
+    "size": 50144069,
+    "size_category": "prime",
+    "false_positives": 3086584944,
+    "false_positives_in_one_past": 77571559
+  },
+  {
+    "size": 59867009,
+    "size_category": "prime",
+    "false_positives": 2730209210,
+    "false_positives_in_one_past": 67013316
+  },
+  {
+    "size": 71475233,
+    "size_category": "prime",
+    "false_positives": 2307748717,
+    "false_positives_in_one_past": 57696184
+  },
+  {
+    "size": 85334297,
+    "size_category": "prime",
+    "false_positives": 1952957855,
+    "false_positives_in_one_past": 49775014
+  },
+  {
+    "size": 101880659,
+    "size_category": "prime",
+    "false_positives": 1654964429,
+    "false_positives_in_one_past": 41446447
+  },
+  {
+    "size": 121635341,
+    "size_category": "prime",
+    "false_positives": 1533578485,
+    "false_positives_in_one_past": 38571845
+  },
+  {
+    "size": 145220479,
+    "size_category": "prime",
+    "false_positives": 1171093431,
+    "false_positives_in_one_past": 29561255
+  },
+  {
+    "size": 173378771,
+    "size_category": "prime",
+    "false_positives": 979419266,
+    "false_positives_in_one_past": 24558700
+  },
+  {
+    "size": 206996917,
+    "size_category": "prime",
+    "false_positives": 809060776,
+    "false_positives_in_one_past": 20408310
+  },
+  {
+    "size": 247133639,
+    "size_category": "prime",
+    "false_positives": 689018898,
+    "false_positives_in_one_past": 17569695
+  },
+  {
+    "size": 295052869,
+    "size_category": "prime",
+    "false_positives": 546134094,
+    "false_positives_in_one_past": 13762033
+  },
+  {
+    "size": 352263649,
+    "size_category": "prime",
+    "false_positives": 476247604,
+    "false_positives_in_one_past": 11989952
+  },
+  {
+    "size": 4194304,
+    "size_category": "round",
+    "false_positives": 6175131251,
+    "false_positives_in_one_past": 162049859
+  },
+  {
+    "size": 5242880,
+    "size_category": "round",
+    "false_positives": 6306669549,
+    "false_positives_in_one_past": 160533005
+  },
+  {
+    "size": 6291456,
+    "size_category": "round",
+    "false_positives": 6125068959,
+    "false_positives_in_one_past": 158695590
+  },
+  {
+    "size": 7340032,
+    "size_category": "round",
+    "false_positives": 5640454760,
+    "false_positives_in_one_past": 150480804
+  },
+  {
+    "size": 8388608,
+    "size_category": "round",
+    "false_positives": 5670783576,
+    "false_positives_in_one_past": 142998315
+  },
+  {
+    "size": 10485760,
+    "size_category": "round",
+    "false_positives": 5571384129,
+    "false_positives_in_one_past": 134517270
+  },
+  {
+    "size": 12582912,
+    "size_category": "round",
+    "false_positives": 5205525399,
+    "false_positives_in_one_past": 129920250
+  },
+  {
+    "size": 14680064,
+    "size_category": "round",
+    "false_positives": 4779488078,
+    "false_positives_in_one_past": 132943287
+  },
+  {
+    "size": 16777216,
+    "size_category": "round",
+    "false_positives": 4917717832,
+    "false_positives_in_one_past": 115021440
+  },
+  {
+    "size": 20971520,
+    "size_category": "round",
+    "false_positives": 4562103990,
+    "false_positives_in_one_past": 100090806
+  },
+  {
+    "size": 25165824,
+    "size_category": "round",
+    "false_positives": 4341274924,
+    "false_positives_in_one_past": 98544674
+  },
+  {
+    "size": 29360128,
+    "size_category": "round",
+    "false_positives": 3751743706,
+    "false_positives_in_one_past": 100886739
+  },
+  {
+    "size": 33554432,
+    "size_category": "round",
+    "false_positives": 4062083420,
+    "false_positives_in_one_past": 81195905
+  },
+  {
+    "size": 41943040,
+    "size_category": "round",
+    "false_positives": 3351077002,
+    "false_positives_in_one_past": 61573114
+  },
+  {
+    "size": 50331648,
+    "size_category": "round",
+    "false_positives": 3264923608,
+    "false_positives_in_one_past": 67133280
+  },
+  {
+    "size": 58720256,
+    "size_category": "round",
+    "false_positives": 2871547373,
+    "false_positives_in_one_past": 71251962
+  },
+  {
+    "size": 67108864,
+    "size_category": "round",
+    "false_positives": 2863052278,
+    "false_positives_in_one_past": 41854767
+  },
+  {
+    "size": 83886080,
+    "size_category": "round",
+    "false_positives": 2275692739,
+    "false_positives_in_one_past": 32792489
+  },
+  {
+    "size": 100663296,
+    "size_category": "round",
+    "false_positives": 2077122368,
+    "false_positives_in_one_past": 40911633
+  },
+  {
+    "size": 117440512,
+    "size_category": "round",
+    "false_positives": 1878260300,
+    "false_positives_in_one_past": 33411984
+  },
+  {
+    "size": 134217728,
+    "size_category": "round",
+    "false_positives": 1682486738,
+    "false_positives_in_one_past": 28026523
+  },
+  {
+    "size": 167772160,
+    "size_category": "round",
+    "false_positives": 1398717992,
+    "false_positives_in_one_past": 16361508
+  },
+  {
+    "size": 201326592,
+    "size_category": "round",
+    "false_positives": 1167176955,
+    "false_positives_in_one_past": 12766368
+  },
+  {
+    "size": 234881024,
+    "size_category": "round",
+    "false_positives": 1082759885,
+    "false_positives_in_one_past": 18944918
+  },
+  {
+    "size": 268435456,
+    "size_category": "round",
+    "false_positives": 1124432841,
+    "false_positives_in_one_past": 225896
+  },
+  {
+    "size": 335544320,
+    "size_category": "round",
+    "false_positives": 729278426,
+    "false_positives_in_one_past": 4061834
+  },
+  {
+    "size": 4194303,
+    "size_category": "round_minus_one",
+    "false_positives": 7392119786,
+    "false_positives_in_one_past": 188005908
+  },
+  {
+    "size": 5242879,
+    "size_category": "round_minus_one",
+    "false_positives": 7594227943,
+    "false_positives_in_one_past": 191216784
+  },
+  {
+    "size": 6291455,
+    "size_category": "round_minus_one",
+    "false_positives": 7400847898,
+    "false_positives_in_one_past": 185408913
+  },
+  {
+    "size": 7340031,
+    "size_category": "round_minus_one",
+    "false_positives": 7176215017,
+    "false_positives_in_one_past": 179648732
+  },
+  {
+    "size": 8388607,
+    "size_category": "round_minus_one",
+    "false_positives": 6867277434,
+    "false_positives_in_one_past": 170346621
+  },
+  {
+    "size": 10485759,
+    "size_category": "round_minus_one",
+    "false_positives": 6565320980,
+    "false_positives_in_one_past": 164984124
+  },
+  {
+    "size": 12582911,
+    "size_category": "round_minus_one",
+    "false_positives": 6239933204,
+    "false_positives_in_one_past": 154125343
+  },
+  {
+    "size": 14680063,
+    "size_category": "round_minus_one",
+    "false_positives": 6092341391,
+    "false_positives_in_one_past": 149854145
+  },
+  {
+    "size": 16777215,
+    "size_category": "round_minus_one",
+    "false_positives": 5537796506,
+    "false_positives_in_one_past": 134177366
+  },
+  {
+    "size": 20971519,
+    "size_category": "round_minus_one",
+    "false_positives": 5280345201,
+    "false_positives_in_one_past": 125918889
+  },
+  {
+    "size": 25165823,
+    "size_category": "round_minus_one",
+    "false_positives": 4848219035,
+    "false_positives_in_one_past": 114609133
+  },
+  {
+    "size": 29360127,
+    "size_category": "round_minus_one",
+    "false_positives": 4425852850,
+    "false_positives_in_one_past": 103435677
+  },
+  {
+    "size": 33554431,
+    "size_category": "round_minus_one",
+    "false_positives": 4224671220,
+    "false_positives_in_one_past": 94459494
+  },
+  {
+    "size": 41943039,
+    "size_category": "round_minus_one",
+    "false_positives": 3631140966,
+    "false_positives_in_one_past": 84846607
+  },
+  {
+    "size": 50331647,
+    "size_category": "round_minus_one",
+    "false_positives": 3180265464,
+    "false_positives_in_one_past": 70528295
+  },
+  {
+    "size": 58720255,
+    "size_category": "round_minus_one",
+    "false_positives": 2887623256,
+    "false_positives_in_one_past": 68765572
+  },
+  {
+    "size": 67108863,
+    "size_category": "round_minus_one",
+    "false_positives": 2505373686,
+    "false_positives_in_one_past": 61555399
+  },
+  {
+    "size": 83886079,
+    "size_category": "round_minus_one",
+    "false_positives": 2173170906,
+    "false_positives_in_one_past": 53749464
+  },
+  {
+    "size": 100663295,
+    "size_category": "round_minus_one",
+    "false_positives": 1788390992,
+    "false_positives_in_one_past": 48087883
+  },
+  {
+    "size": 117440511,
+    "size_category": "round_minus_one",
+    "false_positives": 1486363783,
+    "false_positives_in_one_past": 58201904
+  },
+  {
+    "size": 134217727,
+    "size_category": "round_minus_one",
+    "false_positives": 1576152942,
+    "false_positives_in_one_past": 22008409
+  },
+  {
+    "size": 167772159,
+    "size_category": "round_minus_one",
+    "false_positives": 1117501764,
+    "false_positives_in_one_past": 38993724
+  },
+  {
+    "size": 201326591,
+    "size_category": "round_minus_one",
+    "false_positives": 1062980734,
+    "false_positives_in_one_past": 16687840
+  },
+  {
+    "size": 234881023,
+    "size_category": "round_minus_one",
+    "false_positives": 927196576,
+    "false_positives_in_one_past": 16838270
+  },
+  {
+    "size": 268435455,
+    "size_category": "round_minus_one",
+    "false_positives": 848079721,
+    "false_positives_in_one_past": 9563006
+  },
+  {
+    "size": 335544319,
+    "size_category": "round_minus_one",
+    "false_positives": 623341788,
+    "false_positives_in_one_past": 9630440
+  }
+]

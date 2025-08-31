@@ -42,7 +42,7 @@
   /// The paper size
   /// -> "jacow" | "a4" | "letter"
   paper-size: "jacow",
-  /// The heading used for the abstract
+  /// The headi0ng used for theabstract
   /// -> str | content
   abstract-title: "Abstract",
   /// The heading used for the references
@@ -154,7 +154,7 @@
   // layout
   
   let paper = (
-    if lower(paper-size) == "a4" {(width: 21mm, height: 29.7mm)}
+    if lower(paper-size) == "a4" {(width: 210mm, height: 297mm)}
     else if lower(paper-size) in ("us", "letter", "us-letter") {(width: 8.5in, height: 11in)}
     else if lower(paper-size) in ("jacow", "test") {(width: 21cm, height: 11in)}
     else {panic("Unsupported paper-size, use 'a4', 'us-letter' or 'jacow'!")}
@@ -165,8 +165,9 @@
   let column-width = 82.5mm
   let column-gutter = 5mm
   let bottom-margin = 0.75in + 0.1in
-  let column-height = 9.5in - 0.1in
-  
+  // let column-height = 9.5in - 0.1in
+  let column-height = 258.9mm - 0.1in
+
   set page(
     width: paper.width,
     height: if lower(paper-size) == "test" {auto} else {paper.height},

@@ -897,8 +897,55 @@ fn get_random_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
     start_positions
 }
 
+fn analyze_state_space() {
+    let solvability_map = build_solvability_map();
+
+    #[derive(Serialize)]
+    struct Info {
+        solvable_at: Vec<i32>,
+        solvable_norm_at: Vec<i32>,
+        via_solvable_at: Vec<i32>,
+        via_solvable_norm_at: Vec<i32>,
+    }
+
+    let mut info = Info {
+        solvable_at: vec![0; 34],
+        solvable_norm_at: vec![0; 34],
+        via_solvable_at: vec![0; 34],
+        via_solvable_norm_at: vec![0; 34],
+    };
+
+    for (pos, b) in solvability_map.iter().enumerate() {
+        if b {
+            let pos = Position(pos as u64);
+            let is_normalized = pos == pos.normalize();
+            let is_via_solvable = solvability_map.is_visited(pos.inverse());
+
+            let count = pos.count() as usize;
+
+            info.solvable_at[count] += 1;
+
+            if is_normalized {
+                info.solvable_norm_at[count] += 1;
+            }
+            if is_via_solvable {
+                info.via_solvable_at[count] += 1;
+            }
+            if is_via_solvable && is_normalized {
+                info.via_solvable_norm_at[count] += 1;
+            }
+        }
+    }
+
+    serde_json::to_writer_pretty(
+        std::fs::File::create("state-space-sizes.json").unwrap(),
+        &info,
+    )
+    .unwrap();
+}
+
 fn main() {
-    build_data_and_perform_false_positive_evaluation_for_primes_with_k();
+    analyze_state_space();
     return;
     let prime_filter = BloomFilter::load_from_file("filters/filter_173378771_norm.bin");
     evaluate_difficult_positions(&prime_filter);
