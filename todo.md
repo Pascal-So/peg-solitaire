@@ -16,6 +16,9 @@
 ## Implementation
 
 * Show timeline of forward/backward solution
+* Do forward/backward solution independently.
+* Track start-to-current moves. only search for and notify of backwards solution
+  when no such track exists.
 
 ## Report
 
