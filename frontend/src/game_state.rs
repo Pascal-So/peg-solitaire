@@ -1,35 +1,28 @@
 use common::{
-    debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Coord, Position, NR_HOLES,
-    NR_PEGS,
+    coord::{coordinate_to_index, Coord},
+    debruijn::de_bruijn_solvable,
+    solve_with_bloom_filter, BloomFilter, Position, NR_PEGS,
 };
-
-#[rustfmt::skip]
-pub static HOLE_COORDS: [Coord; NR_HOLES] = [
-    (2, 0), (3, 0), (4, 0),
-    (2, 1), (3, 1), (4, 1),
-    (0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2),
-    (0, 3), (1, 3), (2, 3), (3, 3), (4, 3), (5, 3), (6, 3),
-    (0, 4), (1, 4), (2, 4), (3, 4), (4, 4), (5, 4), (6, 4),
-    (2, 5), (3, 5), (4, 5),
-    (2, 6), (3, 6), (4, 6),
-];
 
 #[derive(Clone)]
 pub struct GameState {
     pub pegs: [Peg; NR_PEGS],
     history: Vec<MoveInfo>,
+    backwards_solve: Vec<MoveInfo>,
+    forwards_solve: Vec<MoveInfo>,
     redo: Vec<MoveInfo>,
 }
 
 fn default_pegs() -> [Peg; NR_PEGS] {
     let mut pegs = [Peg {
-        coord: (0, 0),
+        coord: Coord::center(),
         alive: true,
     }; NR_PEGS];
 
     let mut idx = 0;
-    for &c in &HOLE_COORDS {
-        if c != (3, 3) {
+
+    for c in Coord::all() {
+        if c != Coord::center() {
             pegs[idx].coord = c;
             idx += 1;
         }
@@ -50,17 +43,13 @@ pub struct MoveInfo {
     dst: Coord,
 }
 
-pub enum LookupResult {
-    Invalid,
-    Peg(usize),
-    Empty,
-}
-
 impl GameState {
     pub fn new() -> Self {
         GameState {
             pegs: default_pegs(),
             history: Vec::new(),
+            backwards_solve: vec![],
+            forwards_solve: vec![],
             redo: Vec::new(),
         }
     }
@@ -71,13 +60,14 @@ impl GameState {
         let mut moved_idx = None;
         let mut eliminated_idx = None;
 
-        let dx = dst.0 - src.0;
-        let dy = dst.1 - src.1;
+        let (dx, dy) = dst - src;
         if !(dx.abs() == 2 && dy == 0 || dx == 0 && dy.abs() == 2) {
             log::info!("Moves must be 2-jumps");
             return None;
         }
-        let mid = ((src.0 + dst.0) / 2, (src.1 + dst.1) / 2);
+        let mid = src
+            .shift(dx / 2, dy / 2)
+            .expect("center between valid positions should be valid");
 
         for (i, p) in self.pegs.iter().enumerate() {
             if !p.alive {
@@ -166,22 +156,18 @@ impl GameState {
         self.apply_move_inner(move_info, false)
     }
 
-    pub fn lookup(&self, coord: Coord) -> LookupResult {
-        if (coord.0 < 2 || coord.0 > 4) && (coord.1 < 2 || coord.1 > 4) {
-            return LookupResult::Invalid;
-        }
-
+    pub fn lookup(&self, coord: Coord) -> Option<usize> {
         for (i, p) in self.pegs.iter().enumerate() {
             if p.coord == coord && p.alive {
-                return LookupResult::Peg(i);
+                return Some(i);
             }
         }
 
-        LookupResult::Empty
+        None
     }
 
     pub fn edit_toggle_peg(mut self, coord: Coord) -> Self {
-        if let LookupResult::Peg(idx) = self.lookup(coord) {
+        if let Some(idx) = self.lookup(coord) {
             self.pegs[idx].alive = false;
             self.history.clear();
             self.redo.clear();
@@ -204,8 +190,7 @@ impl GameState {
         let mut out = 0;
         for p in self.pegs.iter() {
             if p.alive {
-                let idx = common::coordinate_to_index(p.coord)
-                    .expect("pegs should only have valid coordinates");
+                let idx = coordinate_to_index(p.coord);
                 out |= 1 << idx as u64;
             }
         }
@@ -233,7 +218,9 @@ mod tests {
     #[test]
     fn test_move() {
         let gs = GameState::new();
-        let move_info = gs.check_move((5, 3), (3, 3)).unwrap();
+        let move_info = gs
+            .check_move(Coord::new(2, 0).unwrap(), Coord::center())
+            .unwrap();
 
         let gs = gs.apply_move(move_info);
         gs.as_position().print();

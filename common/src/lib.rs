@@ -1,6 +1,6 @@
+pub mod coord;
 pub mod debruijn;
 
-use std::hash::Hasher;
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
@@ -8,23 +8,10 @@ use bincode::config;
 use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
 use rand::{seq::SliceRandom, SeedableRng};
 use rand_pcg::Pcg64Mcg;
-use rustc_hash::FxHasher;
 
 use crate::debruijn::de_bruijn_solvable;
 
-pub const NR_HOLES: usize = 33;
 pub const NR_PEGS: usize = 32;
-
-pub type Coord = (i16, i16);
-
-pub fn coordinate_to_index((x, y): Coord) -> Option<i16> {
-    match (y, x) {
-        (0..=1, 2..=4) => Some((x - 2) + y * 3),
-        (2..=4, 0..=6) => Some(x + (y - 2) * 7 + 6),
-        (5..=6, 2..=4) => Some((x - 2) + (y - 5) * 3 + 27),
-        _ => None,
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Position(pub u64);
@@ -155,7 +142,7 @@ impl Position {
             for _ in 0..7 {
                 print_bit();
             }
-            print!("\n");
+            println!();
         }
         for _ in 0..2 {
             print!("{side_space}");
@@ -324,7 +311,7 @@ impl BloomFilter {
 
     fn hash(&self, pos: Position) -> usize {
         let nr_bits = self.nr_bits() as u64;
-        (pos.0 as u64 % nr_bits) as usize
+        (pos.0 % nr_bits) as usize
     }
 
     pub fn insert(&mut self, position: Position) {
@@ -341,7 +328,7 @@ impl BloomFilter {
     }
 
     fn check_valid_k(&self) {
-        assert_eq!(self.k, 1, "only k=1 supported currently",);
+        assert_eq!(self.k, 1, "only k=1 supported currently");
     }
 
     pub fn load_from_slice(data: &[u8]) -> Self {
@@ -483,35 +470,35 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
 
 #[cfg(test)]
 fn compute_all_jumps() -> [Jump; 76] {
+    use crate::coord::{coordinate_to_index, Coord};
+
     let mut v = Vec::new();
 
-    for i in 0..4 {
-        let (a1, a2, a3, a4, ox, oy) = match i {
-            0 => (1, 0, 0, 1, 0, 0),
-            1 => (0, 1, -1, 0, 6, 0),
-            2 => (-1, 0, 0, -1, 6, 6),
-            3 => (0, -1, 1, 0, 0, 6),
-            _ => unreachable!(),
-        };
+    for direction in 0..4 {
+        let jumps = Coord::all().into_iter().filter_map(|coord| {
+            // historical artifact: we used to have x as the outer loop and y
+            // inner, whereas Coord::all is reversed. Transpose here to align.
+            let mut coord_a = Coord::new(coord.y(), coord.x()).unwrap();
+            let mut coord_b = coord_a.shift(1, 0)?;
+            let mut coord_c = coord_a.shift(2, 0)?;
 
-        let rot = |x: i16, y: i16| -> (i16, i16) { (x * a1 + y * a3 + ox, x * a2 + y * a4 + oy) };
-
-        for x in 0..7 {
-            for y in 0..7 {
-                let idxs = (
-                    coordinate_to_index(rot(x + 0, y)),
-                    coordinate_to_index(rot(x + 1, y)),
-                    coordinate_to_index(rot(x + 2, y)),
-                );
-
-                if let (Some(a), Some(b), Some(c)) = idxs {
-                    let j1 = (1u64 << a) + (1u64 << b);
-                    let j2 = 1u64 << c;
-                    let j = Jump(j1 as u64, j2 as u64);
-                    v.push(j);
-                }
+            for _ in 0..direction {
+                coord_a = coord_a.rotate();
+                coord_b = coord_b.rotate();
+                coord_c = coord_c.rotate();
             }
-        }
+
+            let a = coordinate_to_index(coord_a);
+            let b = coordinate_to_index(coord_b);
+            let c = coordinate_to_index(coord_c);
+
+            let j1 = (1u64 << a) + (1u64 << b);
+            let j2 = 1u64 << c;
+            let j = Jump(j1 as u64, j2 as u64);
+            Some(j)
+        });
+
+        v.extend(jumps);
     }
 
     v.try_into().expect("should find exactly 76 jumps")
@@ -522,18 +509,17 @@ mod tests {
     use rand::{RngCore, SeedableRng};
     use tempfile::tempdir;
 
+    use crate::coord::{coordinate_to_index, Coord};
+
     use super::*;
 
     #[test]
     fn test_coords() {
         let mut next_idx = 0;
-        for y in 0..7 {
-            for x in 0..7 {
-                if let Some(idx) = coordinate_to_index((x, y)) {
-                    assert_eq!(next_idx, idx);
-                    next_idx += 1;
-                }
-            }
+        for coord in Coord::all() {
+            let idx = coordinate_to_index(coord);
+            assert_eq!(next_idx, idx);
+            next_idx += 1;
         }
 
         assert_eq!(next_idx, 33);

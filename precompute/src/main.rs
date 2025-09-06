@@ -535,16 +535,14 @@ fn round_minus_one_candidates(range: Range<u32>) -> Vec<u32> {
 fn get_candidates_groups() -> [(Vec<u32>, String); 3] {
     // 512KB to 42MB
     let range = 512 * 1024 * 8..42 * 1024 * 1024 * 8;
-    let candidates = [
+    [
         (prime_candidates(range.clone()), "prime".to_string()),
         (round_candidates(range.clone()), "round".to_string()),
         (
             round_minus_one_candidates(range.clone()),
             "round_minus_one".to_string(),
         ),
-    ];
-
-    candidates
+    ]
 }
 
 fn build_data_and_perform_false_positive_evaluation() {

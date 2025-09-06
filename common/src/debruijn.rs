@@ -1,6 +1,9 @@
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
-use crate::{coordinate_to_index, Position};
+use crate::{
+    coord::{coordinate_to_index, Coord},
+    Position,
+};
 
 /// Galois Field with four elements.
 ///
@@ -84,17 +87,17 @@ pub fn de_bruijn_class(pos: Position) -> (GF4, GF4) {
 
     for x in -3..=3 {
         for y in -3..=3 {
-            let exponent_a = x + y;
-            let exponent_b = x - y;
-
-            let coords = (x + 3, y + 3);
-            let Some(idx) = coordinate_to_index(coords) else {
+            let Some(coord) = Coord::new(x, y) else {
                 continue;
             };
 
+            let idx = coordinate_to_index(coord);
             if pos.0 & (1u64 << idx) == 0 {
                 continue;
             }
+
+            let exponent_a = x + y;
+            let exponent_b = x - y;
 
             a += GF4::P.pow(exponent_a);
             b += GF4::P.pow(exponent_b);

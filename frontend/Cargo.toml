@@ -12,3 +12,4 @@ yew_icons = { version = "0.8.0", features = ["LucideRedo2", "LucideUndo2"] }
 common = { path = "../common" }
 gloo-net = "0.6.0"
 wasm-bindgen-futures = "0.4.50"
+web-sys = { version = "0.3.78", features = ["HtmlElement"] }
