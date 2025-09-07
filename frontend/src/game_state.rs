@@ -1,15 +1,14 @@
 use common::{
-    coord::{coordinate_to_index, Coord},
-    debruijn::de_bruijn_solvable,
-    solve_with_bloom_filter, BloomFilter, Position, NR_PEGS,
+    coord::Coord, debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Position,
+    NR_PEGS,
 };
 
 #[derive(Clone)]
 pub struct GameState {
     pub pegs: [Peg; NR_PEGS],
     history: Vec<MoveInfo>,
-    backwards_solve: Vec<MoveInfo>,
-    forwards_solve: Vec<MoveInfo>,
+    backwards_solve: Option<Vec<MoveInfo>>,
+    forwards_solve: Option<Vec<MoveInfo>>,
     redo: Vec<MoveInfo>,
 }
 
@@ -48,8 +47,8 @@ impl GameState {
         GameState {
             pegs: default_pegs(),
             history: Vec::new(),
-            backwards_solve: vec![],
-            forwards_solve: vec![],
+            backwards_solve: None,
+            forwards_solve: None,
             redo: Vec::new(),
         }
     }
@@ -102,7 +101,7 @@ impl GameState {
             return "no!";
         }
         match solve_with_bloom_filter(self.as_position().normalize(), filter) {
-            common::SolveResult::Solved => "yes",
+            common::SolveResult::Solved(_) => "yes",
             common::SolveResult::Unsolvable => "no",
             common::SolveResult::TimedOut => "?",
         }
@@ -190,8 +189,7 @@ impl GameState {
         let mut out = 0;
         for p in self.pegs.iter() {
             if p.alive {
-                let idx = coordinate_to_index(p.coord);
-                out |= 1 << idx as u64;
+                out |= p.coord.bitmask();
             }
         }
         Position(out)

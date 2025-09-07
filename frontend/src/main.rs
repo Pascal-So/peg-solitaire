@@ -9,9 +9,10 @@ use yew_icons::{Icon, IconId};
 
 use crate::game_state::GameState;
 
+const PX_HOLE_DISTANCE: i16 = 34;
+
 #[function_component]
 fn App() -> Html {
-    let scale = |x: i16| x * 34;
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 
     let game_state = use_state(|| GameState::new());
@@ -212,8 +213,8 @@ fn App() -> Html {
                 }) }
 
                 { for game_state.pegs.iter().enumerate().map(|(i, p)| {
-                    let left = scale(p.coord.x() + 3);
-                    let top = scale(p.coord.y() + 3);
+                    let left = PX_HOLE_DISTANCE * (p.coord.x() + 3);
+                    let top = PX_HOLE_DISTANCE * (p.coord.y() + 3);
                     html!{
                         <div
                             class="peg"

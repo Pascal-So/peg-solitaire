@@ -10,6 +10,8 @@ pub fn get_difficult_positions() -> Vec<Position> {
         Position(7897868249),
         Position(6165560768),
         Position(3840063982),
+        Position(8148855295), // times out, but next one returns unsolvable???
+        Position(8287234559),
     ]
 }
 

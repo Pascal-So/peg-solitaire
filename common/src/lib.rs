@@ -9,93 +9,45 @@ use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
 use rand::{seq::SliceRandom, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
-use crate::debruijn::de_bruijn_solvable;
+use crate::{coord::Coord, debruijn::de_bruijn_solvable};
 
 pub const NR_PEGS: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Position(pub u64);
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Jump(u64, u64);
+pub struct Jump {
+    remove_bits: u64,
+    add_bits: u64,
+    src: Coord,
+    mid: Coord,
+    dst: Coord,
+}
 
-pub const ALL_JUMPS: [Jump; 76] = [
-    Jump(192, 256),
-    Jump(24576, 32768),
-    Jump(3145728, 4194304),
-    Jump(384, 512),
-    Jump(49152, 65536),
-    Jump(6291456, 8388608),
-    Jump(3, 4),
-    Jump(24, 32),
-    Jump(768, 1024),
-    Jump(98304, 131072),
-    Jump(12582912, 16777216),
-    Jump(402653184, 536870912),
-    Jump(3221225472, 4294967296),
-    Jump(1536, 2048),
-    Jump(196608, 262144),
-    Jump(25165824, 33554432),
-    Jump(3072, 4096),
-    Jump(393216, 524288),
-    Jump(50331648, 67108864),
-    Jump(36, 1024),
-    Jump(18, 512),
-    Jump(9, 256),
-    Jump(1056, 131072),
-    Jump(528, 65536),
-    Jump(264, 32768),
-    Jump(528384, 67108864),
-    Jump(264192, 33554432),
-    Jump(132096, 16777216),
-    Jump(66048, 8388608),
-    Jump(33024, 4194304),
-    Jump(16512, 2097152),
-    Jump(8256, 1048576),
-    Jump(16908288, 536870912),
-    Jump(8454144, 268435456),
-    Jump(4227072, 134217728),
-    Jump(553648128, 4294967296),
-    Jump(276824064, 2147483648),
-    Jump(138412032, 1073741824),
-    Jump(100663296, 16777216),
-    Jump(786432, 131072),
-    Jump(6144, 1024),
-    Jump(50331648, 8388608),
-    Jump(393216, 65536),
-    Jump(3072, 512),
-    Jump(6442450944, 1073741824),
-    Jump(805306368, 134217728),
-    Jump(25165824, 4194304),
-    Jump(196608, 32768),
-    Jump(1536, 256),
-    Jump(48, 8),
-    Jump(6, 1),
-    Jump(12582912, 2097152),
-    Jump(98304, 16384),
-    Jump(768, 128),
-    Jump(6291456, 1048576),
-    Jump(49152, 8192),
-    Jump(384, 64),
-    Jump(1207959552, 4194304),
-    Jump(2415919104, 8388608),
-    Jump(4831838208, 16777216),
-    Jump(138412032, 32768),
-    Jump(276824064, 65536),
-    Jump(553648128, 131072),
-    Jump(1056768, 64),
-    Jump(2113536, 128),
-    Jump(4227072, 256),
-    Jump(8454144, 512),
-    Jump(16908288, 1024),
-    Jump(33816576, 2048),
-    Jump(67633152, 4096),
-    Jump(33024, 8),
-    Jump(66048, 16),
-    Jump(132096, 32),
-    Jump(264, 1),
-    Jump(528, 2),
-    Jump(1056, 4),
-];
+impl Jump {
+    pub fn from_coordinate_pair(src: Coord, dst: Coord) -> Option<Jump> {
+        let (dx, dy) = dst - src;
+        if !matches!((dx.abs(), dy.abs()), (0, 2) | (2, 0)) {
+            // coordinates are not axis-aligned and two holes apart
+            return None;
+        }
+
+        let mid = src
+            .shift(dx / 2, dy / 2)
+            .expect("center between valid positions should be valid");
+
+        let remove_bits = src.bitmask() | mid.bitmask();
+        let add_bits = dst.bitmask();
+
+        Some(Jump {
+            remove_bits,
+            add_bits,
+            src,
+            mid,
+            dst,
+        })
+    }
+}
 
 impl Position {
     pub fn from_ascii(lines: [&str; 7]) -> Self {
@@ -187,21 +139,21 @@ impl Position {
     }
 
     pub fn can_jump(&self, jump: Jump) -> bool {
-        (self.0 & jump.1) == 0 && (self.0 & jump.0).count_ones() == 2
+        (self.0 & jump.add_bits) == 0 && (self.0 & jump.remove_bits).count_ones() == 2
     }
     pub fn can_jump_inverse(&self, jump: Jump) -> bool {
-        (self.0 & jump.0) == 0 && (self.0 & jump.1) > 0
+        (self.0 & jump.remove_bits) == 0 && (self.0 & jump.add_bits) > 0
     }
     pub fn apply_jump(&self, jump: Jump) -> Position {
         let mut next = self.0;
-        next &= !jump.0;
-        next |= jump.1;
+        next &= !jump.remove_bits;
+        next |= jump.add_bits;
         Position(next)
     }
     pub fn apply_jump_inverse(&self, jump: Jump) -> Position {
         let mut next = self.0;
-        next |= jump.0;
-        next &= !jump.1;
+        next |= jump.remove_bits;
+        next &= !jump.add_bits;
         Position(next)
     }
     pub fn rotate(&self) -> Position {
@@ -273,6 +225,10 @@ impl Position {
 
         Position(candidates.iter().map(|p| p.0).min().unwrap())
     }
+
+    pub fn is_occupied(&self, coord: Coord) -> bool {
+        self.0 & coord.bitmask() > 0
+    }
 }
 
 #[cfg_attr(not(target_family = "wasm"), derive(bincode::Encode))]
@@ -337,6 +293,16 @@ impl BloomFilter {
         filter.check_valid_k();
         filter
     }
+
+    #[cfg(test)]
+    /// Generate a Bloom Filter that returns true on every query.
+    fn always_true() -> Self {
+        Self {
+            nr_bits: 1,
+            k: 1,
+            bits: BincodeBitBox(bitbox![u32, Lsb0; 1; 1]),
+        }
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -394,7 +360,7 @@ impl bincode::Encode for BincodeBitBox {
 }
 
 pub enum SolveResult {
-    Solved,
+    Solved(Vec<Jump>),
     Unsolvable,
     TimedOut,
 }
@@ -421,7 +387,7 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
             if pos.can_jump(jump) {
                 let next = pos.apply_jump(jump);
                 if next == end {
-                    return SolveResult::Solved;
+                    return SolveResult::Solved(vec![jump]);
                 }
 
                 if next.count() == 1 {
@@ -433,7 +399,10 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
                 }
 
                 match inner(next, filter, end, nr_steps, jumps) {
-                    SolveResult::Solved => return SolveResult::Solved,
+                    SolveResult::Solved(mut list) => {
+                        list.push(jump);
+                        return SolveResult::Solved(list);
+                    }
                     SolveResult::Unsolvable => {}
                     SolveResult::TimedOut => return SolveResult::TimedOut,
                 }
@@ -447,17 +416,20 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
         return SolveResult::Unsolvable;
     }
 
-    let mut jumps = ALL_JUMPS;
+    let mut jumps = all_jumps();
     let mut rng = Pcg64Mcg::seed_from_u64(0);
 
     let end = Position::default_end();
     if pos == end {
-        return SolveResult::Solved;
+        return SolveResult::Solved(vec![]);
     }
 
     for _ in 0..200 {
         match inner(pos, filter, end, &mut 0, &jumps) {
-            SolveResult::Solved => return SolveResult::Solved,
+            SolveResult::Solved(mut list) => {
+                list.reverse();
+                return SolveResult::Solved(list);
+            }
             SolveResult::Unsolvable => return SolveResult::Unsolvable,
             SolveResult::TimedOut => {}
         }
@@ -468,17 +440,12 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResu
     SolveResult::TimedOut
 }
 
-#[cfg(test)]
-fn compute_all_jumps() -> [Jump; 76] {
-    use crate::coord::{coordinate_to_index, Coord};
-
+pub fn all_jumps() -> [Jump; 76] {
     let mut v = Vec::new();
 
     for direction in 0..4 {
         let jumps = Coord::all().into_iter().filter_map(|coord| {
-            // historical artifact: we used to have x as the outer loop and y
-            // inner, whereas Coord::all is reversed. Transpose here to align.
-            let mut coord_a = Coord::new(coord.y(), coord.x()).unwrap();
+            let mut coord_a = coord;
             let mut coord_b = coord_a.shift(1, 0)?;
             let mut coord_c = coord_a.shift(2, 0)?;
 
@@ -488,13 +455,15 @@ fn compute_all_jumps() -> [Jump; 76] {
                 coord_c = coord_c.rotate();
             }
 
-            let a = coordinate_to_index(coord_a);
-            let b = coordinate_to_index(coord_b);
-            let c = coordinate_to_index(coord_c);
-
-            let j1 = (1u64 << a) + (1u64 << b);
-            let j2 = 1u64 << c;
-            let j = Jump(j1 as u64, j2 as u64);
+            let remove_bits = coord_a.bitmask() | coord_b.bitmask();
+            let add_bits = coord_c.bitmask();
+            let j = Jump {
+                remove_bits,
+                add_bits,
+                src: coord_a,
+                mid: coord_b,
+                dst: coord_c,
+            };
             Some(j)
         });
 
@@ -509,25 +478,31 @@ mod tests {
     use rand::{RngCore, SeedableRng};
     use tempfile::tempdir;
 
-    use crate::coord::{coordinate_to_index, Coord};
+    use crate::coord::Coord;
 
     use super::*;
 
     #[test]
+    // test if the coordinate bits appear in the expected sequential order
     fn test_coords() {
-        let mut next_idx = 0;
+        let mut next_mask = 1;
         for coord in Coord::all() {
-            let idx = coordinate_to_index(coord);
-            assert_eq!(next_idx, idx);
-            next_idx += 1;
+            assert_eq!(next_mask, coord.bitmask());
+            next_mask *= 2;
         }
 
-        assert_eq!(next_idx, 33);
+        assert_eq!(next_mask, 1u64 << 33);
     }
 
     #[test]
-    fn test_jumps() {
-        assert_eq!(ALL_JUMPS, compute_all_jumps());
+    fn test_jump_list_contains_all_unique_jumps() {
+        let jumps = all_jumps();
+
+        for i in 0..jumps.len() {
+            for j in 0..i {
+                assert_ne!(jumps[i], jumps[j]);
+            }
+        }
     }
 
     #[test]
@@ -644,6 +619,33 @@ mod tests {
 
         let b = a.mirror();
         assert_eq!(a.normalize(), b.normalize());
+    }
+
+    #[test]
+    fn test_solver_returns_valid_sequence_of_jumps() {
+        let filter = BloomFilter::always_true();
+
+        let mut pos = Position::from_ascii([
+            "    ...    ",
+            "    ...    ",
+            "  .......  ",
+            "  ..###..  ",
+            "  ...#...  ",
+            "    .#.    ",
+            "    ...    ",
+        ]);
+
+        let SolveResult::Solved(jumps) = solve_with_bloom_filter(pos, &filter) else {
+            panic!("should be solvable");
+        };
+        assert_eq!(jumps.len(), 4);
+
+        for jump in jumps {
+            assert!(pos.can_jump(jump));
+            pos = pos.apply_jump(jump);
+        }
+
+        assert_eq!(pos, Position::default_end());
     }
 
     #[test]

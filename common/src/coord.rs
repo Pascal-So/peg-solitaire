@@ -27,12 +27,21 @@ impl Coord {
         }
     }
 
-    pub fn center() -> Self {
+    pub const fn center() -> Self {
         Coord { x: 0, y: 0 }
     }
 
-    pub fn bit_index(self) -> Option<i16> {
-        todo!()
+    pub fn bitmask(self) -> u64 {
+        let x = self.x + 3;
+        let y = self.y + 3;
+        let idx = match (y, x) {
+            (0..=1, 2..=4) => (x - 2) + y * 3,
+            (2..=4, 0..=6) => x + (y - 2) * 7 + 6,
+            (5..=6, 2..=4) => (x - 2) + (y - 5) * 3 + 27,
+            _ => unreachable!("invalid coordinates in Coord struct should be impossible"),
+        };
+
+        1u64 << idx
     }
 
     pub fn rotate(self) -> Coord {
@@ -62,16 +71,5 @@ impl Coord {
     }
     pub fn y(self) -> i16 {
         self.y
-    }
-}
-
-pub fn coordinate_to_index(coord: Coord) -> i16 {
-    let x = coord.x + 3;
-    let y = coord.y + 3;
-    match (y, x) {
-        (0..=1, 2..=4) => (x - 2) + y * 3,
-        (2..=4, 0..=6) => x + (y - 2) * 7 + 6,
-        (5..=6, 2..=4) => (x - 2) + (y - 5) * 3 + 27,
-        _ => unreachable!("invalid coordinates in Coord struct should be impossible"),
     }
 }

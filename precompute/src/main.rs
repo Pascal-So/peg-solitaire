@@ -13,7 +13,7 @@ use rand_pcg::Pcg64Mcg;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
-use common::{debruijn::de_bruijn_solvable, BloomFilter, Jump, Position, ALL_JUMPS};
+use common::{all_jumps, debruijn::de_bruijn_solvable, BloomFilter, Jump, Position};
 use precompute::{
     positions::{get_difficult_positions, get_solvable_positions},
     VisitMap,
@@ -188,8 +188,8 @@ fn build_solvability_map() -> VisitMap {
     let mut solvability_map = VisitMap::new();
     let mut total_visited: u64 = 0;
 
-    fn step(visit_map: &mut VisitMap, pos: Position, total_visited: &mut u64) {
-        for jump in ALL_JUMPS {
+    fn step(visit_map: &mut VisitMap, pos: Position, total_visited: &mut u64, jumps: &[Jump; 76]) {
+        for &jump in jumps {
             if pos.can_jump_inverse(jump) {
                 let next = pos.apply_jump_inverse(jump);
                 if visit_map.is_visited(next) {
@@ -198,7 +198,7 @@ fn build_solvability_map() -> VisitMap {
                 visit_map.visit(next);
                 *total_visited += 1;
                 if next.count() < Position::default_start().count() {
-                    step(visit_map, next, total_visited);
+                    step(visit_map, next, total_visited, jumps);
                 }
             }
         }
@@ -208,7 +208,12 @@ fn build_solvability_map() -> VisitMap {
     solvability_map.visit(start);
     total_visited += 1;
 
-    step(&mut solvability_map, start, &mut total_visited);
+    step(
+        &mut solvability_map,
+        start,
+        &mut total_visited,
+        &all_jumps(),
+    );
 
     println!("Built solvability map. Total solvable positions: {total_visited}");
 
@@ -237,6 +242,8 @@ fn build_one_past_solvable_map(solvability_map: &VisitMap) -> VisitMap {
 
     let mut one_past_map = VisitMap::new();
 
+    let jumps = all_jumps();
+
     for (pos, b) in solvability_map.iter().enumerate() {
         if !b {
             continue;
@@ -247,7 +254,7 @@ fn build_one_past_solvable_map(solvability_map: &VisitMap) -> VisitMap {
             continue;
         }
 
-        for jump in ALL_JUMPS {
+        for jump in jumps {
             if pos.can_jump(jump) {
                 let next = pos.apply_jump(jump);
                 one_past_map.visit(next);
@@ -308,7 +315,7 @@ fn evaluate_solver_steps(filter: &BloomFilter) -> Vec<u64> {
         }
         *nr_steps += 1;
 
-        let mut jumps = ALL_JUMPS;
+        let mut jumps = all_jumps();
         jumps.shuffle(rng);
 
         for jump in jumps {
@@ -458,7 +465,7 @@ fn evaluate_solver_steps(filter: &BloomFilter) -> Vec<u64> {
         let pos = Position::default_start();
         let end = Position::default_end();
 
-        let mut jumps = ALL_JUMPS;
+        let mut jumps = all_jumps();
         jumps.shuffle(&mut rng);
 
         let nr_attempts = 5;
@@ -625,7 +632,7 @@ fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
 }
 
 fn evaluate_various_positions(filter: &BloomFilter) {
-    let mut jumps = ALL_JUMPS;
+    let mut jumps = all_jumps();
     let mut rng = Pcg64Mcg::seed_from_u64(0);
 
     let mut start_positions = get_solvable_positions();
@@ -732,7 +739,7 @@ fn evaluate_various_positions(filter: &BloomFilter) {
 }
 
 fn evaluate_difficult_positions(filter: &BloomFilter) {
-    let mut jumps = ALL_JUMPS;
+    let mut jumps = all_jumps();
     let mut rng = Pcg64Mcg::seed_from_u64(0);
 
     let mut start_positions = get_difficult_positions();
@@ -852,7 +859,7 @@ fn evaluate_difficult_positions(filter: &BloomFilter) {
 fn count_positive_children(filter: &BloomFilter, pos: Position) -> (u64, u64) {
     let mut positives = 0;
     let mut total = 0;
-    for jump in ALL_JUMPS {
+    for jump in all_jumps() {
         if pos.can_jump(jump) {
             total += 1;
             let next = pos.apply_jump(jump);

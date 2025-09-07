@@ -1,9 +1,6 @@
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
-use crate::{
-    coord::{coordinate_to_index, Coord},
-    Position,
-};
+use crate::{coord::Coord, Position};
 
 /// Galois Field with four elements.
 ///
@@ -91,8 +88,7 @@ pub fn de_bruijn_class(pos: Position) -> (GF4, GF4) {
                 continue;
             };
 
-            let idx = coordinate_to_index(coord);
-            if pos.0 & (1u64 << idx) == 0 {
+            if !pos.is_occupied(coord) {
                 continue;
             }
 
