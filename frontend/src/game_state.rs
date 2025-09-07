@@ -1,15 +1,18 @@
 use common::{
-    coord::Coord, debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Position,
-    NR_PEGS,
+    coord::Coord, debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Jump,
+    Position, NR_PEGS,
 };
 
 #[derive(Clone)]
 pub struct GameState {
+    // todo: move this to a separate inner type
     pub pegs: [Peg; NR_PEGS],
     history: Vec<MoveInfo>,
+    redo: Vec<MoveInfo>,
+
+    // todo: unify with history and redo?
     backwards_solve: Option<Vec<MoveInfo>>,
     forwards_solve: Option<Vec<MoveInfo>>,
-    redo: Vec<MoveInfo>,
 }
 
 fn default_pegs() -> [Peg; NR_PEGS] {
@@ -166,23 +169,27 @@ impl GameState {
     }
 
     pub fn edit_toggle_peg(mut self, coord: Coord) -> Self {
+        let mut changed = false;
         if let Some(idx) = self.lookup(coord) {
             self.pegs[idx].alive = false;
-            self.history.clear();
-            self.redo.clear();
-            self
+            changed = true;
         } else {
             for p in self.pegs.iter_mut() {
                 if !p.alive {
                     p.alive = true;
                     p.coord = coord;
-                    self.history.clear();
-                    self.redo.clear();
+                    changed = true;
                     break;
                 }
             }
-            self
         }
+
+        if changed {
+            self.history.clear();
+            self.redo.clear();
+        }
+
+        self
     }
 
     pub fn as_position(&self) -> Position {
@@ -194,6 +201,25 @@ impl GameState {
         }
         Position(out)
     }
+}
+
+/// Given a list of jumps, convert this into moves which don't just consider from
+/// where to where we move a peg, but also which peg is being moved.
+///
+/// Preconditions: jump sequence must be applicable to the given game state
+fn convert_jump_sequence_to_moves(mut game_state: GameState, jumps: &[Jump]) -> Vec<MoveInfo> {
+    let mut moves = vec![];
+
+    for &jump in jumps {
+        let m = game_state
+            .check_move(jump.src, jump.dst)
+            .expect("jump sequence should be applicable to initial game state");
+        moves.push(m);
+
+        game_state = game_state.apply_move(m);
+    }
+
+    moves
 }
 
 #[derive(Clone, Copy)]
@@ -234,5 +260,46 @@ mod tests {
             "    ###    ",
         ]);
         assert_eq!(gs.as_position(), expected);
+    }
+
+    #[test]
+    fn test_jump_sequence_to_moves_conversion() {
+        let mut game_state = GameState {
+            pegs: [Peg {
+                coord: Coord::center(),
+                alive: false,
+            }; NR_PEGS],
+            history: vec![],
+            redo: vec![],
+            backwards_solve: None,
+            forwards_solve: None,
+        };
+
+        game_state.pegs[0] = Peg {
+            coord: Coord::center(),
+            alive: true,
+        };
+        game_state.pegs[1] = Peg {
+            coord: Coord::new(1, 0).unwrap(),
+            alive: true,
+        };
+        game_state.pegs[2] = Peg {
+            coord: Coord::new(-2, 0).unwrap(),
+            alive: true,
+        };
+
+        let jumps = [
+            Jump::from_coordinate_pair(Coord::new(1, 0).unwrap(), Coord::new(-1, 0).unwrap())
+                .unwrap(),
+            Jump::from_coordinate_pair(Coord::new(-2, 0).unwrap(), Coord::center()).unwrap(),
+        ];
+
+        let moves = convert_jump_sequence_to_moves(game_state.clone(), &jumps);
+
+        for m in moves {
+            game_state = game_state.apply_move(m);
+        }
+
+        assert_eq!(game_state.as_position(), Position::default_end());
     }
 }

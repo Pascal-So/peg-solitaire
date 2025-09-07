@@ -168,6 +168,8 @@ fn App() -> Html {
 
     log::info!("Current position: {}", game_state.as_position().0);
 
+    let current_nr_pegs = game_state.nr_pegs();
+
     html! {
         <div ref={div_ref} class="scaling-container" style={format!("transform: scale({})", *display_scale)}>
             <div class={overall_classes}>
@@ -194,7 +196,7 @@ fn App() -> Html {
                     style="grid-row: 1; grid-column: 6/8;"
                     onclick={edit}
                 >
-                    if *edit_mode {<>{"done"}</>} else {<>{"edit"}</>}
+                    {if *edit_mode {"done"} else {"edit"}}
                 </button>
 
                 <div
@@ -225,13 +227,72 @@ fn App() -> Html {
                 }) }
             </div>
 
-            <div style="max-width: 234px">
-                <h1>{"asdf"}</h1>
+            <div style="width: 234px; text-align: left">
+                <div style="display: flex; flex-direction: row; width: 100%; text-align: center; font-size: 0.4rem; align-items: stretch">
+                    <span>{"start"}</span>
+                    <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
+
+                        <ProgressBarSegment solvability={Solvability::Yes} len={32 - current_nr_pegs} side={Side::Left}/>
+                        <img src="img/circle.svg"/>
+                        <ProgressBarSegment solvability={Solvability::No} len={current_nr_pegs - 1} side={Side::Right}/>
+                    </div>
+                    <span>{"end"}</span>
+
+                </div>
+
+                <img src="img/yes.svg"/>
+                <img src="img/no.svg"/>
+                <img src="img/maybe.svg"/>
+
             </div>
         </div>
     }
 }
 
+#[derive(PartialEq, Eq, Copy, Clone)]
+enum Solvability {
+    Yes,
+    No,
+    Maybe,
+}
+
+#[derive(PartialEq, Eq, Copy, Clone)]
+enum Side {
+    Left,
+    Right,
+}
+
+#[derive(Properties, Clone, PartialEq)]
+struct ProgressBarSegmentProps {
+    solvability: Solvability,
+    len: i32,
+    side: Side,
+}
+
+#[function_component]
+fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
+    let ProgressBarSegmentProps {
+        solvability,
+        len,
+        side,
+    } = props;
+    let (color, icon, borderstyle) = match solvability {
+        Solvability::Yes => ("#555", "img/yes.svg", "solid"),
+        Solvability::No => ("#822", "img/no.svg", "dotted"),
+        Solvability::Maybe => ("#882", "img/maybe.svg", "dashed"),
+    };
+    let outer_margin = 4;
+    let inner_margin = if *len > 0 { outer_margin } else { 0 };
+    let margins = match side {
+        Side::Left => format!("0 {inner_margin}px 0 {outer_margin}px"),
+        Side::Right => format!("0 {outer_margin}px 0 {inner_margin}px"),
+    };
+
+    html! {
+        <div style={format!("flex-grow: {len}; flex-shrink: 1; flex-basis: auto; margin: {margins}; border-top: 1px {borderstyle} {color}; transition: all 200ms ease; height: 0")}>
+        </div>
+    }
+}
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
     yew::Renderer::<App>::new().render();

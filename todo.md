@@ -20,6 +20,8 @@
 * Track start-to-current moves. only search for and notify of backwards solution
   when no such track exists.
 
+* switch to tailwind?
+
 ## Report
 
 * Plot like in "Checkers is Solved" for state space size

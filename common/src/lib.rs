@@ -19,9 +19,9 @@ pub struct Position(pub u64);
 pub struct Jump {
     remove_bits: u64,
     add_bits: u64,
-    src: Coord,
+    pub src: Coord,
     mid: Coord,
-    dst: Coord,
+    pub dst: Coord,
 }
 
 impl Jump {
