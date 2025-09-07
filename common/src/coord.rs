@@ -5,12 +5,12 @@ use std::ops::Sub;
 /// Invariant: can only represent valid coordinates
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Coord {
-    x: i16,
-    y: i16,
+    x: i8,
+    y: i8,
 }
 
 impl Sub for Coord {
-    type Output = (i16, i16);
+    type Output = (i8, i8);
 
     fn sub(self, rhs: Self) -> Self::Output {
         (self.x - rhs.x, self.y - rhs.y)
@@ -18,7 +18,7 @@ impl Sub for Coord {
 }
 
 impl Coord {
-    pub fn new(x: i16, y: i16) -> Option<Self> {
+    pub fn new(x: i8, y: i8) -> Option<Self> {
         let coord = Coord { x, y };
         if coord.is_valid() {
             Some(coord)
@@ -51,7 +51,7 @@ impl Coord {
         }
     }
 
-    pub fn shift(self, x: i16, y: i16) -> Option<Coord> {
+    pub fn shift(self, x: i8, y: i8) -> Option<Coord> {
         Self::new(self.x + x, self.y + y)
     }
 
@@ -66,10 +66,10 @@ impl Coord {
         (-3..=3).flat_map(|y| (-3..=3).filter_map(move |x| Coord::new(x, y)))
     }
 
-    pub fn x(self) -> i16 {
+    pub fn x(self) -> i8 {
         self.x
     }
-    pub fn y(self) -> i16 {
+    pub fn y(self) -> i8 {
         self.y
     }
 }

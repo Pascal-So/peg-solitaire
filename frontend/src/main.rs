@@ -214,9 +214,9 @@ fn App() -> Html {
                     />
                 }) }
 
-                { for game_state.pegs.iter().enumerate().map(|(i, p)| {
-                    let left = PX_HOLE_DISTANCE * (p.coord.x() + 3);
-                    let top = PX_HOLE_DISTANCE * (p.coord.y() + 3);
+                { for game_state.pegs().enumerate().map(|(i, p)| {
+                    let left = PX_HOLE_DISTANCE * (p.coord.x() as i16 + 3);
+                    let top = PX_HOLE_DISTANCE * (p.coord.y() as i16 + 3);
                     html!{
                         <div
                             class="peg"

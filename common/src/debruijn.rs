@@ -65,7 +65,7 @@ impl Mul for GF4 {
 
 impl GF4 {
     /// Raise the element to a given whole-number power
-    fn pow(self, exp: i16) -> Self {
+    fn pow(self, exp: i8) -> Self {
         let exp = exp.rem_euclid(3);
 
         let mut out = GF4::One;

@@ -3,34 +3,52 @@ use common::{
     Position, NR_PEGS,
 };
 
-#[derive(Clone)]
-pub struct GameState {
-    // todo: move this to a separate inner type
-    pub pegs: [Peg; NR_PEGS],
-    history: Vec<MoveInfo>,
-    redo: Vec<MoveInfo>,
-
-    // todo: unify with history and redo?
-    backwards_solve: Option<Vec<MoveInfo>>,
-    forwards_solve: Option<Vec<MoveInfo>>,
+#[derive(Clone, PartialEq, Eq)]
+enum HistoryEntry {
+    Edit(Arrangement),
+    Move(MoveInfo),
 }
 
-fn default_pegs() -> [Peg; NR_PEGS] {
-    let mut pegs = [Peg {
-        coord: Coord::center(),
-        alive: true,
-    }; NR_PEGS];
+#[derive(Clone, PartialEq, Eq)]
+struct Arrangement {
+    pub pegs: [Peg; NR_PEGS],
+}
 
-    let mut idx = 0;
+impl Arrangement {
+    fn new() -> Self {
+        let mut pegs = [Peg {
+            coord: Coord::center(),
+            alive: true,
+        }; NR_PEGS];
 
-    for c in Coord::all() {
-        if c != Coord::center() {
-            pegs[idx].coord = c;
-            idx += 1;
+        let mut idx = 0;
+
+        for c in Coord::all() {
+            if c != Coord::center() {
+                pegs[idx].coord = c;
+                idx += 1;
+            }
         }
-    }
 
-    pegs
+        Self { pegs }
+    }
+}
+
+impl Default for Arrangement {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone)]
+pub struct GameState {
+    arrangement: Arrangement,
+
+    history: Vec<HistoryEntry>,
+    redo: Vec<HistoryEntry>,
+
+    backwards_solve: Option<Vec<MoveInfo>>,
+    forwards_solve: Option<Vec<MoveInfo>>,
 }
 
 /// Acts as a token, proving that the move is possible. This token is
@@ -48,12 +66,16 @@ pub struct MoveInfo {
 impl GameState {
     pub fn new() -> Self {
         GameState {
-            pegs: default_pegs(),
+            arrangement: Arrangement::default(),
             history: Vec::new(),
             backwards_solve: None,
             forwards_solve: None,
             redo: Vec::new(),
         }
+    }
+
+    pub fn pegs(&self) -> impl Iterator<Item = &Peg> {
+        self.arrangement.pegs.iter()
     }
 
     /// Check if the move is possible, and if yes, return a token that can be used
@@ -71,7 +93,7 @@ impl GameState {
             .shift(dx / 2, dy / 2)
             .expect("center between valid positions should be valid");
 
-        for (i, p) in self.pegs.iter().enumerate() {
+        for (i, p) in self.pegs().enumerate() {
             if !p.alive {
                 continue;
             }
@@ -95,7 +117,7 @@ impl GameState {
     }
 
     pub fn nr_pegs(&self) -> i32 {
-        self.pegs.iter().filter(|peg| peg.alive).count() as i32
+        self.pegs().filter(|peg| peg.alive).count() as i32
     }
 
     pub fn solvable(&self, filter: &BloomFilter) -> &str {
@@ -115,17 +137,20 @@ impl GameState {
         if reverse {
             std::mem::swap(&mut move_info.src, &mut move_info.dst);
         }
-        assert_eq!(self.pegs[move_info.moved_idx].coord, move_info.src);
-        self.pegs[move_info.eliminated_idx].alive = reverse;
-        self.pegs[move_info.moved_idx].coord = move_info.dst;
+        assert_eq!(
+            self.arrangement.pegs[move_info.moved_idx].coord,
+            move_info.src
+        );
+        self.arrangement.pegs[move_info.eliminated_idx].alive = reverse;
+        self.arrangement.pegs[move_info.moved_idx].coord = move_info.dst;
         self
     }
 
     pub fn apply_move(mut self, move_info: MoveInfo) -> Self {
         self = self.apply_move_inner(move_info, false);
 
-        self.history.push(move_info);
-        if self.redo.pop() != Some(move_info) {
+        self.history.push(HistoryEntry::Move(move_info));
+        if self.redo.pop() != Some(HistoryEntry::Move(move_info)) {
             self.redo.clear();
         }
 
@@ -141,25 +166,49 @@ impl GameState {
     }
 
     pub fn undo(mut self) -> Self {
-        let Some(last_move) = self.history.pop() else {
+        let Some(entry) = self.history.pop() else {
             return self;
         };
 
-        self.redo.push(last_move);
-        self.apply_move_inner(last_move, true)
+        match entry {
+            HistoryEntry::Edit(mut arrangement) => {
+                std::mem::swap(&mut self.arrangement, &mut arrangement);
+                self.redo.push(HistoryEntry::Edit(arrangement));
+                self.backwards_solve = None;
+                self.forwards_solve = None;
+            }
+            HistoryEntry::Move(last_move) => {
+                self.redo.push(HistoryEntry::Move(last_move));
+                self = self.apply_move_inner(last_move, true)
+            }
+        }
+
+        self
     }
 
     pub fn redo(mut self) -> Self {
-        let Some(move_info) = self.redo.pop() else {
+        let Some(entry) = self.redo.pop() else {
             return self;
         };
 
-        self.history.push(move_info);
-        self.apply_move_inner(move_info, false)
+        match entry {
+            HistoryEntry::Edit(mut arrangement) => {
+                std::mem::swap(&mut self.arrangement, &mut arrangement);
+                self.history.push(HistoryEntry::Edit(arrangement));
+                self.backwards_solve = None;
+                self.forwards_solve = None;
+            }
+            HistoryEntry::Move(move_info) => {
+                self.history.push(HistoryEntry::Move(move_info));
+                self = self.apply_move_inner(move_info, false);
+            }
+        }
+
+        self
     }
 
     pub fn lookup(&self, coord: Coord) -> Option<usize> {
-        for (i, p) in self.pegs.iter().enumerate() {
+        for (i, p) in self.pegs().enumerate() {
             if p.coord == coord && p.alive {
                 return Some(i);
             }
@@ -169,12 +218,14 @@ impl GameState {
     }
 
     pub fn edit_toggle_peg(mut self, coord: Coord) -> Self {
+        let old_arrangement = self.arrangement.clone();
         let mut changed = false;
+
         if let Some(idx) = self.lookup(coord) {
-            self.pegs[idx].alive = false;
+            self.arrangement.pegs[idx].alive = false;
             changed = true;
         } else {
-            for p in self.pegs.iter_mut() {
+            for p in self.arrangement.pegs.iter_mut() {
                 if !p.alive {
                     p.alive = true;
                     p.coord = coord;
@@ -185,7 +236,14 @@ impl GameState {
         }
 
         if changed {
-            self.history.clear();
+            // If the last history entry already contains an edit, then we
+            // don't append another entry. This has the effect of combining
+            // all the edits into one.
+            // TODO: add an edit session id or something like that, so that
+            // we can have one undo step per edit session.
+            if !matches!(self.history.last(), Some(&HistoryEntry::Edit(_))) {
+                self.history.push(HistoryEntry::Edit(old_arrangement));
+            }
             self.redo.clear();
         }
 
@@ -194,7 +252,7 @@ impl GameState {
 
     pub fn as_position(&self) -> Position {
         let mut out = 0;
-        for p in self.pegs.iter() {
+        for p in self.pegs() {
             if p.alive {
                 out |= p.coord.bitmask();
             }
@@ -222,7 +280,7 @@ fn convert_jump_sequence_to_moves(mut game_state: GameState, jumps: &[Jump]) -> 
     moves
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Peg {
     pub coord: Coord,
     pub alive: bool,
@@ -265,25 +323,27 @@ mod tests {
     #[test]
     fn test_jump_sequence_to_moves_conversion() {
         let mut game_state = GameState {
-            pegs: [Peg {
-                coord: Coord::center(),
-                alive: false,
-            }; NR_PEGS],
+            arrangement: Arrangement {
+                pegs: [Peg {
+                    coord: Coord::center(),
+                    alive: false,
+                }; NR_PEGS],
+            },
             history: vec![],
             redo: vec![],
             backwards_solve: None,
             forwards_solve: None,
         };
 
-        game_state.pegs[0] = Peg {
+        game_state.arrangement.pegs[0] = Peg {
             coord: Coord::center(),
             alive: true,
         };
-        game_state.pegs[1] = Peg {
+        game_state.arrangement.pegs[1] = Peg {
             coord: Coord::new(1, 0).unwrap(),
             alive: true,
         };
-        game_state.pegs[2] = Peg {
+        game_state.arrangement.pegs[2] = Peg {
             coord: Coord::new(-2, 0).unwrap(),
             alive: true,
         };
