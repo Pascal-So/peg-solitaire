@@ -1,6 +1,6 @@
 mod game_state;
 
-use common::{coord::Coord, BloomFilter};
+use common::{BloomFilter, coord::Coord};
 use gloo_net::http::Request;
 use web_sys::HtmlElement;
 use yew::prelude::*;
@@ -11,6 +11,12 @@ use crate::game_state::GameState;
 
 const PX_HOLE_DISTANCE: i16 = 34;
 
+enum BloomFilterResource {
+    Loaded(BloomFilter),
+    Loading,
+    NotRequested,
+}
+
 #[function_component]
 fn App() -> Html {
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
@@ -19,13 +25,16 @@ fn App() -> Html {
     let selected = use_state(|| None);
     let display_scale = use_state(|| 1.0);
     let edit_mode = use_state(|| false);
-    let bloom_filter = use_state(|| None);
+    let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
+    let solver_active = use_state(|| false);
+    let has_made_first_move = use_state(|| false);
 
     {
         let bloom_filter = bloom_filter.clone();
         use_effect_with((), move |_| {
             let bloom_filter = bloom_filter.clone();
+            bloom_filter.set(BloomFilterResource::Loading);
             wasm_bindgen_futures::spawn_local(async move {
                 let response = Request::get("http://localhost:8081/filter_173378771_1_norm.bin")
                     .send()
@@ -34,24 +43,28 @@ fn App() -> Html {
 
                 let body = response.binary().await.unwrap();
                 let filter = BloomFilter::load_from_slice(&body);
-                bloom_filter.set(Some(filter));
+                bloom_filter.set(BloomFilterResource::Loaded(filter));
             });
         });
     }
 
     let reset = {
         let game_state = game_state.clone();
+        let selected = selected.clone();
         Callback::from(move |_| {
             log::info!("reset");
+            selected.set(None);
             game_state.set(GameState::new());
         })
     };
 
     let undo = {
         let game_state = game_state.clone();
+        let selected = selected.clone();
         Callback::from(move |_| {
             if game_state.can_undo() {
                 log::info!("undo");
+                selected.set(None);
                 game_state.set(GameState::clone(&game_state).undo());
             }
         })
@@ -59,9 +72,11 @@ fn App() -> Html {
 
     let redo = {
         let game_state = game_state.clone();
+        let selected = selected.clone();
         Callback::from(move |_| {
             if game_state.can_redo() {
                 log::info!("redo");
+                selected.set(None);
                 game_state.set(GameState::clone(&game_state).redo());
             }
         })
@@ -83,16 +98,19 @@ fn App() -> Html {
         let game_state = game_state.clone();
         let move_peg = move_peg.clone();
         let edit_mode = edit_mode.clone();
+        let has_made_first_move = has_made_first_move.clone();
 
         move |coord: Coord| {
             let selected = selected.clone();
             let move_peg = move_peg.clone();
             let game_state = game_state.clone();
             let edit_mode = edit_mode.clone();
+            let has_made_first_move = has_made_first_move.clone();
 
             Callback::from(move |_: MouseEvent| {
                 if *edit_mode {
                     game_state.set(GameState::clone(&game_state).edit_toggle_peg(coord));
+                    has_made_first_move.set(true);
                     return;
                 }
 
@@ -106,6 +124,7 @@ fn App() -> Html {
                     None => {
                         if let Some(src) = *selected {
                             move_peg.emit((src, coord));
+                            has_made_first_move.set(true);
                             selected.set(None);
                         }
                     }
@@ -144,9 +163,10 @@ fn App() -> Html {
                     return;
                 };
 
-                let new_scale = (window_size.0 / div.client_width() as f64)
-                    .min(window_size.1 / div.client_height() as f64)
-                    * 0.9;
+                let div_width = div.client_width() as f64;
+                let div_height = div_width * 1.3;
+
+                let new_scale = (window_size.0 / div_width).min(window_size.1 / div_height) * 0.9;
                 display_scale.set(new_scale);
             },
             200,
@@ -163,6 +183,13 @@ fn App() -> Html {
         Callback::from(move |_| {
             edit_mode.set(!*edit_mode);
             selected.set(None);
+        })
+    };
+
+    let toggle_solver = {
+        let solver_active = solver_active.clone();
+        Callback::from(move |_| {
+            solver_active.set(!*solver_active);
         })
     };
 
@@ -199,12 +226,21 @@ fn App() -> Html {
                     {if *edit_mode {"done"} else {"edit"}}
                 </button>
 
+                <button
+                    style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(*has_made_first_move))}
+                    onclick={toggle_solver}
+                >
+                    {"solver"}
+                </button>
+
+                if false {
                 <div
                     style="grid-row: 7; grid-column: 6/8; display: flex; align-items: baseline; justify-content: end"
                 >
                     <span style="font-size: 0.4rem">{"solvable: "}</span>
-                    <span style="font-size: 0.8rem; padding-left: 0.2rem">{format!("{}", bloom_filter.as_ref().map_or("loading..", |filter| game_state.solvable(filter)))}</span>
+                    // <span style="font-size: 0.8rem; padding-left: 0.2rem">{format!("{}", bloom_filter.as_ref().map_or("loading..", |filter| game_state.solvable(filter)))}</span>
                 </div>
+                }
 
                 { for Coord::all().into_iter().map(|coord| html! {
                     <div
@@ -227,24 +263,39 @@ fn App() -> Html {
                 }) }
             </div>
 
-            <div style="width: 234px; text-align: left">
-                <div style="display: flex; flex-direction: row; width: 100%; text-align: center; font-size: 0.4rem; align-items: stretch">
-                    <span>{"start"}</span>
-                    <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
+            if *solver_active {
+                <div style="width: 234px; text-align: left">
+                    {
+                        match &*bloom_filter {
+                            BloomFilterResource::Loaded(bloom_filter) => html!{
+                                <div>
+                                    <div style="display: flex; flex-direction: row; width: 100%; text-align: center; font-size: 0.4rem; align-items: stretch">
+                                        <span>{"start"}</span>
+                                        <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
 
-                        <ProgressBarSegment solvability={Solvability::Yes} len={32 - current_nr_pegs} side={Side::Left}/>
-                        <img src="img/circle.svg"/>
-                        <ProgressBarSegment solvability={Solvability::No} len={current_nr_pegs - 1} side={Side::Right}/>
-                    </div>
-                    <span>{"end"}</span>
+                                            <ProgressBarSegment solvability={Solvability::Yes} len={32 - current_nr_pegs} side={Side::Left}/>
+                                            <img src="img/circle.svg"/>
+                                            <ProgressBarSegment solvability={Solvability::No} len={current_nr_pegs - 1} side={Side::Right}/>
+                                        </div>
+                                        <span>{"end"}</span>
 
+                                    </div>
+
+                                    <img src="img/yes.svg"/>
+                                    <img src="img/no.svg"/>
+                                    <img src="img/maybe.svg"/>
+                                </div>
+                            },
+                            BloomFilterResource::Loading => html!{
+                                {"loading"}
+                            },
+                            BloomFilterResource::NotRequested => html!{
+                                {"not requested"}
+                            },
+                        }
+                    }
                 </div>
-
-                <img src="img/yes.svg"/>
-                <img src="img/no.svg"/>
-                <img src="img/maybe.svg"/>
-
-            </div>
+            }
         </div>
     }
 }

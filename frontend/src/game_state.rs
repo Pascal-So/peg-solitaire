@@ -1,6 +1,6 @@
 use common::{
-    coord::Coord, debruijn::de_bruijn_solvable, solve_with_bloom_filter, BloomFilter, Jump,
-    Position, NR_PEGS,
+    BloomFilter, Jump, NR_PEGS, Position, coord::Coord, debruijn::de_bruijn_solvable,
+    solve_with_bloom_filter,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -32,54 +32,7 @@ impl Arrangement {
 
         Self { pegs }
     }
-}
 
-impl Default for Arrangement {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone)]
-pub struct GameState {
-    arrangement: Arrangement,
-
-    history: Vec<HistoryEntry>,
-    redo: Vec<HistoryEntry>,
-
-    backwards_solve: Option<Vec<MoveInfo>>,
-    forwards_solve: Option<Vec<MoveInfo>>,
-}
-
-/// Acts as a token, proving that the move is possible. This token is
-/// not completely fool-proof, since it's possible that the game state
-/// has been changed in between, but as long as tokens are immediately
-/// used, this is fine.
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct MoveInfo {
-    moved_idx: usize,
-    eliminated_idx: usize,
-    src: Coord,
-    dst: Coord,
-}
-
-impl GameState {
-    pub fn new() -> Self {
-        GameState {
-            arrangement: Arrangement::default(),
-            history: Vec::new(),
-            backwards_solve: None,
-            forwards_solve: None,
-            redo: Vec::new(),
-        }
-    }
-
-    pub fn pegs(&self) -> impl Iterator<Item = &Peg> {
-        self.arrangement.pegs.iter()
-    }
-
-    /// Check if the move is possible, and if yes, return a token that can be used
-    /// to apply the move.
     pub fn check_move(&self, src: Coord, dst: Coord) -> Option<MoveInfo> {
         let mut moved_idx = None;
         let mut eliminated_idx = None;
@@ -93,7 +46,7 @@ impl GameState {
             .shift(dx / 2, dy / 2)
             .expect("center between valid positions should be valid");
 
-        for (i, p) in self.pegs().enumerate() {
+        for (i, p) in self.pegs.iter().enumerate() {
             if !p.alive {
                 continue;
             }
@@ -116,6 +69,67 @@ impl GameState {
         })
     }
 
+    fn apply_move(mut self, mut move_info: MoveInfo, dir: Direction) -> Self {
+        if dir == Direction::Backward {
+            std::mem::swap(&mut move_info.src, &mut move_info.dst);
+        }
+        assert_eq!(self.pegs[move_info.moved_idx].coord, move_info.src);
+        self.pegs[move_info.eliminated_idx].alive = dir == Direction::Backward;
+        self.pegs[move_info.moved_idx].coord = move_info.dst;
+        self
+    }
+}
+
+impl Default for Arrangement {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone)]
+pub struct GameState {
+    arrangement: Arrangement,
+
+    history: Vec<HistoryEntry>,
+    redo: Vec<HistoryEntry>,
+
+    path_from_start: Option<Vec<MoveInfo>>,
+    path_to_end: Option<Vec<MoveInfo>>,
+}
+
+/// Acts as a token, proving that the move is possible. This token is
+/// not completely fool-proof, since it's possible that the game state
+/// has been changed in between, but as long as tokens are immediately
+/// used, this is fine.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct MoveInfo {
+    moved_idx: usize,
+    eliminated_idx: usize,
+    src: Coord,
+    dst: Coord,
+}
+
+impl GameState {
+    pub fn new() -> Self {
+        GameState {
+            arrangement: Arrangement::default(),
+            history: Vec::new(),
+            path_from_start: Some(vec![]),
+            path_to_end: None,
+            redo: Vec::new(),
+        }
+    }
+
+    pub fn pegs(&self) -> impl Iterator<Item = &Peg> {
+        self.arrangement.pegs.iter()
+    }
+
+    /// Check if the move is possible, and if yes, return a token that can be used
+    /// to apply the move.
+    pub fn check_move(&self, src: Coord, dst: Coord) -> Option<MoveInfo> {
+        self.arrangement.check_move(src, dst)
+    }
+
     pub fn nr_pegs(&self) -> i32 {
         self.pegs().filter(|peg| peg.alive).count() as i32
     }
@@ -132,22 +146,31 @@ impl GameState {
         }
     }
 
-    /// Only manipulate the peg positions, doesn't include history handling.
-    fn apply_move_inner(mut self, mut move_info: MoveInfo, reverse: bool) -> Self {
-        if reverse {
-            std::mem::swap(&mut move_info.src, &mut move_info.dst);
+    /// Should be called after a move has been successfully applied to the arrangement.
+    /// Here we try to keep the cached solve paths from the start and to the end updated,
+    /// without running the solver again.
+    fn update_solvability(&mut self, move_info: MoveInfo, dir: Direction) {
+        let (forwards, backwards) = match dir {
+            Direction::Forward => (&mut self.path_to_end, &mut self.path_from_start),
+            Direction::Backward => (&mut self.path_from_start, &mut self.path_to_end),
+        };
+
+        if let Some(backwards) = backwards {
+            backwards.push(move_info);
         }
-        assert_eq!(
-            self.arrangement.pegs[move_info.moved_idx].coord,
-            move_info.src
-        );
-        self.arrangement.pegs[move_info.eliminated_idx].alive = reverse;
-        self.arrangement.pegs[move_info.moved_idx].coord = move_info.dst;
-        self
+
+        if let Some(forwards) = forwards
+            && forwards.last() == Some(&move_info)
+        {
+            forwards.pop();
+        } else {
+            *forwards = None;
+        }
     }
 
     pub fn apply_move(mut self, move_info: MoveInfo) -> Self {
-        self = self.apply_move_inner(move_info, false);
+        self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
+        self.update_solvability(move_info, Direction::Forward);
 
         self.history.push(HistoryEntry::Move(move_info));
         if self.redo.pop() != Some(HistoryEntry::Move(move_info)) {
@@ -174,12 +197,13 @@ impl GameState {
             HistoryEntry::Edit(mut arrangement) => {
                 std::mem::swap(&mut self.arrangement, &mut arrangement);
                 self.redo.push(HistoryEntry::Edit(arrangement));
-                self.backwards_solve = None;
-                self.forwards_solve = None;
+                self.path_from_start = None;
+                self.path_to_end = None;
             }
             HistoryEntry::Move(last_move) => {
                 self.redo.push(HistoryEntry::Move(last_move));
-                self = self.apply_move_inner(last_move, true)
+                self.arrangement = self.arrangement.apply_move(last_move, Direction::Backward);
+                self.update_solvability(last_move, Direction::Backward);
             }
         }
 
@@ -195,12 +219,13 @@ impl GameState {
             HistoryEntry::Edit(mut arrangement) => {
                 std::mem::swap(&mut self.arrangement, &mut arrangement);
                 self.history.push(HistoryEntry::Edit(arrangement));
-                self.backwards_solve = None;
-                self.forwards_solve = None;
+                self.path_from_start = None;
+                self.path_to_end = None;
             }
             HistoryEntry::Move(move_info) => {
                 self.history.push(HistoryEntry::Move(move_info));
-                self = self.apply_move_inner(move_info, false);
+                self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
+                self.update_solvability(move_info, Direction::Forward);
             }
         }
 
@@ -264,17 +289,17 @@ impl GameState {
 /// Given a list of jumps, convert this into moves which don't just consider from
 /// where to where we move a peg, but also which peg is being moved.
 ///
-/// Preconditions: jump sequence must be applicable to the given game state
-fn convert_jump_sequence_to_moves(mut game_state: GameState, jumps: &[Jump]) -> Vec<MoveInfo> {
+/// Preconditions: jump sequence must be applicable to the given arrangement
+fn convert_jump_sequence_to_moves(mut arrangement: Arrangement, jumps: &[Jump]) -> Vec<MoveInfo> {
     let mut moves = vec![];
 
     for &jump in jumps {
-        let m = game_state
+        let m = arrangement
             .check_move(jump.src, jump.dst)
             .expect("jump sequence should be applicable to initial game state");
         moves.push(m);
 
-        game_state = game_state.apply_move(m);
+        arrangement = arrangement.apply_move(m, Direction::Forward);
     }
 
     moves
@@ -283,7 +308,17 @@ fn convert_jump_sequence_to_moves(mut game_state: GameState, jumps: &[Jump]) -> 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Peg {
     pub coord: Coord,
+    /// Is the peg still on the board?
     pub alive: bool,
+}
+
+/// Time (or move) direction
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    /// Forward move, removes one peg from the board
+    Forward,
+    /// Backward move, adds one peg to the board
+    Backward,
 }
 
 #[cfg(test)]
@@ -331,8 +366,8 @@ mod tests {
             },
             history: vec![],
             redo: vec![],
-            backwards_solve: None,
-            forwards_solve: None,
+            path_from_start: None,
+            path_to_end: None,
         };
 
         game_state.arrangement.pegs[0] = Peg {
@@ -354,12 +389,35 @@ mod tests {
             Jump::from_coordinate_pair(Coord::new(-2, 0).unwrap(), Coord::center()).unwrap(),
         ];
 
-        let moves = convert_jump_sequence_to_moves(game_state.clone(), &jumps);
+        let moves = convert_jump_sequence_to_moves(game_state.arrangement.clone(), &jumps);
 
         for m in moves {
             game_state = game_state.apply_move(m);
         }
 
         assert_eq!(game_state.as_position(), Position::default_end());
+    }
+
+    #[test]
+    fn undo_and_redo_keeps_solve_path_intact() {
+        let game_state = GameState::new();
+        let move_info = game_state
+            .check_move(Coord::new(-2, 0).unwrap(), Coord::center())
+            .unwrap();
+
+        let game_state = game_state.apply_move(move_info);
+
+        assert_eq!(
+            game_state.path_from_start.as_ref().unwrap(),
+            &vec![move_info]
+        );
+
+        let game_state = game_state.undo();
+        assert_eq!(game_state.path_from_start.as_ref().unwrap(), &vec![]);
+        let game_state = game_state.redo();
+        assert_eq!(
+            game_state.path_from_start.as_ref().unwrap(),
+            &vec![move_info]
+        );
     }
 }
