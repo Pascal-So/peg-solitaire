@@ -162,7 +162,7 @@ unchanged if all particles in the universe were to be replaced with their antipa
 universe was mirrored (parity transformation) and time was reversed @sozzi_parity_2007. Note that all three
 transformations must be applied together, the symmetry does not hold for a subset of them.
 
-By abuse of terminology, we now apply this same concept to Peg Solitaire.
+By gratuitous abuse of terminology, we now apply this same concept to Peg Solitaire.
 
 === Parity Transformation
 If we record a game and mirror one coordinate, the resulting recording still behaves exactly like a normal game of Peg
