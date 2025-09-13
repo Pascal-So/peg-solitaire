@@ -1,5 +1,5 @@
 use common::{
-    BloomFilter, Jump, NR_PEGS, Position, coord::Coord, debruijn::de_bruijn_solvable,
+    BloomFilter, Direction, Jump, NR_PEGS, Position, coord::Coord, debruijn::de_bruijn_solvable,
     solve_with_bloom_filter,
 };
 
@@ -86,7 +86,7 @@ impl Default for Arrangement {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct GameState {
     arrangement: Arrangement,
 
@@ -134,22 +134,51 @@ impl GameState {
         self.pegs().filter(|peg| peg.alive).count() as i32
     }
 
-    pub fn solvable(&self, filter: &BloomFilter) -> &str {
+    pub fn is_solvable(&self) -> (Solvability, Solvability) {
+        let from_option = |opt: &Option<_>| {
+            if opt.is_some() {
+                Solvability::Yes
+            } else {
+                Solvability::No
+            }
+        };
+        (
+            from_option(&self.path_from_start),
+            from_option(&self.path_to_end),
+        )
+    }
+
+    pub fn rerun_solver(mut self, bloom_filter: &BloomFilter) -> Self {
         let pos = self.as_position();
         if !de_bruijn_solvable(pos) {
-            return "no!";
+            self.path_from_start = None;
+            self.path_to_end = None;
+        } else {
+            for (path, dir) in [
+                (&mut self.path_to_end, Direction::Forward),
+                (&mut self.path_from_start, Direction::Backward),
+            ] {
+                if path.is_none() {
+                    log::info!("running solver for direction {dir:?}");
+                    match solve_with_bloom_filter(pos, bloom_filter, dir) {
+                        common::SolveResult::Solved(jumps) => {
+                            let mut moves =
+                                convert_jump_sequence_to_moves(self.arrangement.clone(), &jumps);
+                            moves.reverse();
+                            *path = Some(moves);
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
-        match solve_with_bloom_filter(self.as_position().normalize(), filter) {
-            common::SolveResult::Solved(_) => "yes",
-            common::SolveResult::Unsolvable => "no",
-            common::SolveResult::TimedOut => "?",
-        }
+        self
     }
 
     /// Should be called after a move has been successfully applied to the arrangement.
-    /// Here we try to keep the cached solve paths from the start and to the end updated,
-    /// without running the solver again.
-    fn update_solvability(&mut self, move_info: MoveInfo, dir: Direction) {
+    /// Here we try to keep the solve paths from the start and to the end updated without
+    /// re-running the solver, but only by updating the existing cached values
+    fn update_solve_paths(&mut self, move_info: MoveInfo, dir: Direction) {
         let (forwards, backwards) = match dir {
             Direction::Forward => (&mut self.path_to_end, &mut self.path_from_start),
             Direction::Backward => (&mut self.path_from_start, &mut self.path_to_end),
@@ -170,7 +199,7 @@ impl GameState {
 
     pub fn apply_move(mut self, move_info: MoveInfo) -> Self {
         self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
-        self.update_solvability(move_info, Direction::Forward);
+        self.update_solve_paths(move_info, Direction::Forward);
 
         self.history.push(HistoryEntry::Move(move_info));
         if self.redo.pop() != Some(HistoryEntry::Move(move_info)) {
@@ -203,7 +232,7 @@ impl GameState {
             HistoryEntry::Move(last_move) => {
                 self.redo.push(HistoryEntry::Move(last_move));
                 self.arrangement = self.arrangement.apply_move(last_move, Direction::Backward);
-                self.update_solvability(last_move, Direction::Backward);
+                self.update_solve_paths(last_move, Direction::Backward);
             }
         }
 
@@ -225,7 +254,7 @@ impl GameState {
             HistoryEntry::Move(move_info) => {
                 self.history.push(HistoryEntry::Move(move_info));
                 self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
-                self.update_solvability(move_info, Direction::Forward);
+                self.update_solve_paths(move_info, Direction::Forward);
             }
         }
 
@@ -312,13 +341,11 @@ pub struct Peg {
     pub alive: bool,
 }
 
-/// Time (or move) direction
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Direction {
-    /// Forward move, removes one peg from the board
-    Forward,
-    /// Backward move, adds one peg to the board
-    Backward,
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub enum Solvability {
+    Yes,
+    No,
+    Maybe,
 }
 
 #[cfg(test)]

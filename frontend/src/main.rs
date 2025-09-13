@@ -7,10 +7,11 @@ use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
-use crate::game_state::GameState;
+use crate::game_state::{GameState, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
 
+#[derive(PartialEq)]
 enum BloomFilterResource {
     Loaded(BloomFilter),
     Loading,
@@ -27,26 +28,21 @@ fn App() -> Html {
     let edit_mode = use_state(|| false);
     let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
-    let solver_active = use_state(|| false);
+    let solver_visible = use_state(|| false);
     let has_made_first_move = use_state(|| false);
 
-    {
-        let bloom_filter = bloom_filter.clone();
-        use_effect_with((), move |_| {
-            let bloom_filter = bloom_filter.clone();
-            bloom_filter.set(BloomFilterResource::Loading);
-            wasm_bindgen_futures::spawn_local(async move {
-                let response = Request::get("http://localhost:8081/filter_173378771_1_norm.bin")
-                    .send()
-                    .await
-                    .unwrap();
-
-                let body = response.binary().await.unwrap();
-                let filter = BloomFilter::load_from_slice(&body);
-                bloom_filter.set(BloomFilterResource::Loaded(filter));
-            });
-        });
-    }
+    use_effect_with(
+        (
+            game_state.clone(),
+            solver_visible.clone(),
+            bloom_filter.clone(),
+        ),
+        |(game_state, solver_visible, bloom_filter)| {
+            if **solver_visible && let BloomFilterResource::Loaded(bloom_filter) = &**bloom_filter {
+                game_state.set(GameState::clone(&**game_state).rerun_solver(bloom_filter));
+            }
+        },
+    );
 
     let reset = {
         let game_state = game_state.clone();
@@ -187,9 +183,27 @@ fn App() -> Html {
     };
 
     let toggle_solver = {
-        let solver_active = solver_active.clone();
+        let solver_visible = solver_visible.clone();
         Callback::from(move |_| {
-            solver_active.set(!*solver_active);
+            solver_visible.set(!*solver_visible);
+        })
+    };
+
+    let download_solver = {
+        let bloom_filter = bloom_filter.clone();
+        Callback::from(move |_| {
+            let bloom_filter = bloom_filter.clone();
+            bloom_filter.set(BloomFilterResource::Loading);
+            wasm_bindgen_futures::spawn_local(async move {
+                let response = Request::get("http://localhost:8081/filter_173378771_1_norm.bin")
+                    .send()
+                    .await
+                    .unwrap();
+
+                let body = response.binary().await.unwrap();
+                let filter = BloomFilter::load_from_slice(&body);
+                bloom_filter.set(BloomFilterResource::Loaded(filter));
+            });
         })
     };
 
@@ -233,15 +247,6 @@ fn App() -> Html {
                     {"solver"}
                 </button>
 
-                if false {
-                <div
-                    style="grid-row: 7; grid-column: 6/8; display: flex; align-items: baseline; justify-content: end"
-                >
-                    <span style="font-size: 0.4rem">{"solvable: "}</span>
-                    // <span style="font-size: 0.8rem; padding-left: 0.2rem">{format!("{}", bloom_filter.as_ref().map_or("loading..", |filter| game_state.solvable(filter)))}</span>
-                </div>
-                }
-
                 { for Coord::all().into_iter().map(|coord| html! {
                     <div
                         class={cell_classes(coord)}
@@ -263,48 +268,67 @@ fn App() -> Html {
                 }) }
             </div>
 
-            if *solver_active {
-                <div style="width: 234px; text-align: left">
-                    {
-                        match &*bloom_filter {
-                            BloomFilterResource::Loaded(bloom_filter) => html!{
+            // todo: opacity transition
+            <div style={format!("width: 234px; text-align: left; font-size: 0.4rem; opacity: {};", b2f(*solver_visible))}>
+                {
+                    match &*bloom_filter {
+                        BloomFilterResource::Loaded(_) => {
+                            let (backward, forward) = game_state.is_solvable();
+                            html!{
                                 <div>
                                     <div style="display: flex; flex-direction: row; width: 100%; text-align: center; font-size: 0.4rem; align-items: stretch">
                                         <span>{"start"}</span>
                                         <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
 
-                                            <ProgressBarSegment solvability={Solvability::Yes} len={32 - current_nr_pegs} side={Side::Left}/>
+                                            <ProgressBarSegment solvability={backward} len={32 - current_nr_pegs} side={Side::Left}/>
                                             <img src="img/circle.svg"/>
-                                            <ProgressBarSegment solvability={Solvability::No} len={current_nr_pegs - 1} side={Side::Right}/>
+                                            <ProgressBarSegment solvability={forward} len={current_nr_pegs - 1} side={Side::Right}/>
                                         </div>
                                         <span>{"end"}</span>
-
                                     </div>
 
-                                    <img src="img/yes.svg"/>
-                                    <img src="img/no.svg"/>
-                                    <img src="img/maybe.svg"/>
+                                    {for [(forward, "current position", "end"), (backward, "start", "current position")].map(|(solv, src, dst)| {
+                                        let (path, word) = match solv {
+                                            Solvability::Yes => ("img/yes.svg", "a"),
+                                            _ => ("img/no.svg", "no"),
+                                        };
+
+                                        html!{
+                                            <p>
+                                                <img style="vertical-align: middle" src={path}/>
+                                                <span style="vertical-align: middle">{format!(" There is {word} path from the {src} to the {dst}")}</span>
+                                            </p>
+                                        }
+                                    })}
                                 </div>
-                            },
-                            BloomFilterResource::Loading => html!{
-                                {"loading"}
-                            },
-                            BloomFilterResource::NotRequested => html!{
-                                {"not requested"}
-                            },
-                        }
+                            }
+                        },
+                        BloomFilterResource::Loading => html!{
+                            {"loading"}
+                        },
+                        BloomFilterResource::NotRequested => html!{
+                            <div>
+                                <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data need to be downloaded once initially."}</p>
+                                <button
+                                    style="font-size: inherit"
+                                    onclick={download_solver}
+                                >
+                                    {"download solver"}
+                                </button>
+                                <a href="todo.pdf" target="_blank" style="margin-left: 1em">
+                                    <button
+                                        style="font-size: inherit"
+                                    >
+                                        {"read the theory"}
+                                    </button>
+                                </a>
+                            </div>
+                        },
                     }
-                </div>
-            }
+                }
+            </div>
         </div>
     }
-}
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-enum Solvability {
-    Yes,
-    No,
-    Maybe,
 }
 
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -339,6 +363,7 @@ fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
         Side::Right => format!("0 {outer_margin}px 0 {inner_margin}px"),
     };
 
+    // todo: make it clickable
     html! {
         <div style={format!("flex-grow: {len}; flex-shrink: 1; flex-basis: auto; margin: {margins}; border-top: 1px {borderstyle} {color}; transition: all 200ms ease; height: 0")}>
         </div>

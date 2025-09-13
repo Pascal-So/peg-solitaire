@@ -6,7 +6,7 @@ use std::path::Path;
 
 use bincode::config;
 use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, seq::SliceRandom};
 use rand_pcg::Pcg64Mcg;
 
 use crate::{coord::Coord, debruijn::de_bruijn_solvable};
@@ -359,13 +359,22 @@ impl bincode::Encode for BincodeBitBox {
     }
 }
 
+/// Time (or move) direction
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Direction {
+    /// Forward move, removing pegs from the board
+    Forward,
+    /// Backward move, adding pegs to the board
+    Backward,
+}
+
 pub enum SolveResult {
     Solved(Vec<Jump>),
     Unsolvable,
     TimedOut,
 }
 
-pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter) -> SolveResult {
+pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter, dir: Direction) -> SolveResult {
     if !de_bruijn_solvable(pos) {
         return SolveResult::Unsolvable;
     }
@@ -635,7 +644,8 @@ mod tests {
             "    ...    ",
         ]);
 
-        let SolveResult::Solved(jumps) = solve_with_bloom_filter(pos, &filter) else {
+        let SolveResult::Solved(jumps) = solve_with_bloom_filter(pos, &filter, Direction::Forward)
+        else {
             panic!("should be solvable");
         };
         assert_eq!(jumps.len(), 4);
