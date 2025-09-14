@@ -374,7 +374,11 @@ pub enum SolveResult {
     TimedOut,
 }
 
-pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter, dir: Direction) -> SolveResult {
+pub fn solve_with_bloom_filter(
+    mut pos: Position,
+    filter: &BloomFilter,
+    dir: Direction,
+) -> SolveResult {
     if !de_bruijn_solvable(pos) {
         return SolveResult::Unsolvable;
     }
@@ -427,6 +431,10 @@ pub fn solve_with_bloom_filter(pos: Position, filter: &BloomFilter, dir: Directi
 
     let mut jumps = all_jumps();
     let mut rng = Pcg64Mcg::seed_from_u64(0);
+
+    if dir == Direction::Backward {
+        pos = pos.inverse();
+    }
 
     let end = Position::default_end();
     if pos == end {

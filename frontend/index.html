@@ -97,6 +97,38 @@ button {
     border: 2.2px solid #3b603a;
 }
 
+.progress-bar-segment {
+    flex-shrink: 1;
+    flex-basis: auto;
+    transition: all 200ms ease;
+    height: 8px;
+    display: flex;
+    align-items: center;
+}
+.progress-bar-segment.clickable {
+    cursor: pointer;
+}
+.progress-bar-segment>div {
+    border-top-width: 1px;
+    transition: all 100ms ease;
+    height: 0;
+    width: 100%;
+}
+.progress-bar-segment.clickable:hover>div {
+    border-top-width: 4px;
+}
+
+.solver-box {
+    width: 234px;
+    text-align: left;
+    font-size: 0.4rem;
+    transition: opacity 0.2s;
+}
+
+a, a:visited {
+    color: #99abd5;
+}
+
 </style>
 </head>
 <body></body>

@@ -2,6 +2,7 @@ mod game_state;
 
 use common::{BloomFilter, coord::Coord};
 use gloo_net::http::Request;
+use gloo_timers::future::TimeoutFuture;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
@@ -11,11 +12,21 @@ use crate::game_state::{GameState, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
 
-#[derive(PartialEq)]
+#[derive(Eq)]
 enum BloomFilterResource {
     Loaded(BloomFilter),
     Loading,
     NotRequested,
+}
+
+/// We intentionally broaden the equivalence so that any two bloom filters are
+/// considered equal. This is done to speed up the use_effect_with comparison.
+/// This does not lead to problems because we never replace the bloom filter
+/// once it has been loaded.
+impl PartialEq for BloomFilterResource {
+    fn eq(&self, other: &Self) -> bool {
+        core::mem::discriminant(self) == core::mem::discriminant(other)
+    }
 }
 
 #[function_component]
@@ -30,6 +41,8 @@ fn App() -> Html {
     let div_ref = use_node_ref();
     let solver_visible = use_state(|| false);
     let has_made_first_move = use_state(|| false);
+    let scroll_target = use_state(|| None);
+    let scroll_command_id = use_mut_ref(|| 0u64);
 
     use_effect_with(
         (
@@ -44,12 +57,46 @@ fn App() -> Html {
         },
     );
 
+    use_effect_with((game_state.clone(), scroll_target.clone()), {
+        move |(game_state, scroll_target)| {
+            let scroll_target = scroll_target.clone();
+            let game_state = game_state.clone();
+            *scroll_command_id.borrow_mut() += 1;
+            let current_id = *scroll_command_id.borrow();
+            let scroll_command_id = scroll_command_id.clone();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                TimeoutFuture::new(80).await;
+
+                if *scroll_command_id.borrow() != current_id {
+                    return;
+                }
+
+                if let Some(target) = *scroll_target {
+                    let nr_pegs = game_state.nr_pegs();
+                    let dir = if nr_pegs < target {
+                        common::Direction::Backward
+                    } else if nr_pegs == target {
+                        scroll_target.set(None);
+                        return;
+                    } else {
+                        common::Direction::Forward
+                    };
+
+                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(dir));
+                };
+            });
+        }
+    });
+
     let reset = {
         let game_state = game_state.clone();
         let selected = selected.clone();
+        let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
             log::info!("reset");
             selected.set(None);
+            scroll_target.set(None);
             game_state.set(GameState::new());
         })
     };
@@ -57,10 +104,12 @@ fn App() -> Html {
     let undo = {
         let game_state = game_state.clone();
         let selected = selected.clone();
+        let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
             if game_state.can_undo() {
                 log::info!("undo");
                 selected.set(None);
+                scroll_target.set(None);
                 game_state.set(GameState::clone(&game_state).undo());
             }
         })
@@ -69,10 +118,12 @@ fn App() -> Html {
     let redo = {
         let game_state = game_state.clone();
         let selected = selected.clone();
+        let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
             if game_state.can_redo() {
                 log::info!("redo");
                 selected.set(None);
+                scroll_target.set(None);
                 game_state.set(GameState::clone(&game_state).redo());
             }
         })
@@ -84,7 +135,6 @@ fn App() -> Html {
             let Some(move_info) = game_state.check_move(src, dst) else {
                 return;
             };
-            log::debug!("moving from {src:?} to {dst:?}");
             game_state.set(GameState::clone(&game_state).apply_move(move_info));
         }
     });
@@ -95,6 +145,7 @@ fn App() -> Html {
         let move_peg = move_peg.clone();
         let edit_mode = edit_mode.clone();
         let has_made_first_move = has_made_first_move.clone();
+        let scroll_target = scroll_target.clone();
 
         move |coord: Coord| {
             let selected = selected.clone();
@@ -102,8 +153,11 @@ fn App() -> Html {
             let game_state = game_state.clone();
             let edit_mode = edit_mode.clone();
             let has_made_first_move = has_made_first_move.clone();
+            let scroll_target = scroll_target.clone();
 
             Callback::from(move |_: MouseEvent| {
+                scroll_target.set(None);
+
                 if *edit_mode {
                     game_state.set(GameState::clone(&game_state).edit_toggle_peg(coord));
                     has_made_first_move.set(true);
@@ -268,23 +322,56 @@ fn App() -> Html {
                 }) }
             </div>
 
-            // todo: opacity transition
-            <div style={format!("width: 234px; text-align: left; font-size: 0.4rem; opacity: {};", b2f(*solver_visible))}>
+            <div class="solver-box" style={format!("opacity: {};", b2f(*solver_visible))}>
                 {
                     match &*bloom_filter {
                         BloomFilterResource::Loaded(_) => {
                             let (backward, forward) = game_state.is_solvable();
+                            let move_backward = {
+                                let game_state = game_state.clone();
+                                let scroll_target = scroll_target.clone();
+                                Callback::from(move |_| {
+                                    scroll_target.set(None);
+                                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(common::Direction::Backward));
+                                })
+                            };
+                            let move_forward = {
+                                let game_state = game_state.clone();
+                                let scroll_target = scroll_target.clone();
+                                Callback::from(move |_| {
+                                    scroll_target.set(None);
+                                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(common::Direction::Forward));
+                                })
+                            };
+                            let move_to_start = {
+                                let scroll_target = scroll_target.clone();
+                                Callback::from(move |_| {
+                                    scroll_target.set(Some(32));
+                                })
+                            };
+                            let move_to_end = {
+                                let scroll_target = scroll_target.clone();
+                                Callback::from(move |_| {
+                                    scroll_target.set(Some(1));
+                                })
+                            };
+
                             html!{
                                 <div>
-                                    <div style="display: flex; flex-direction: row; width: 100%; text-align: center; font-size: 0.4rem; align-items: stretch">
-                                        <span>{"start"}</span>
+                                    <div style="display: flex; flex-direction: row; width: 100%; text-align: center; align-items: stretch">
+                                        <span onclick={move_to_start}>{"start"}</span>
                                         <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
 
-                                            <ProgressBarSegment solvability={backward} len={32 - current_nr_pegs} side={Side::Left}/>
-                                            <img src="img/circle.svg"/>
-                                            <ProgressBarSegment solvability={forward} len={current_nr_pegs - 1} side={Side::Right}/>
+                                            <ProgressBarSegment solvability={backward} len={32 - current_nr_pegs} side={Side::Left} callback={move_backward}/>
+                                            <div style="position: relative; line-height: 0">
+                                                <img src="img/circle.svg"/>
+                                                <span style="position: absolute; top: -6px; left: 0; right: 0; font-size: 0.35rem; text-align: center">
+                                                    {game_state.nr_pegs()}
+                                                </span>
+                                            </div>
+                                            <ProgressBarSegment solvability={forward} len={current_nr_pegs - 1} side={Side::Right} callback={move_forward}/>
                                         </div>
-                                        <span>{"end"}</span>
+                                        <span onclick={move_to_end}>{"end"}</span>
                                     </div>
 
                                     {for [(forward, "current position", "end"), (backward, "start", "current position")].map(|(solv, src, dst)| {
@@ -294,12 +381,14 @@ fn App() -> Html {
                                         };
 
                                         html!{
-                                            <p>
-                                                <img style="vertical-align: middle" src={path}/>
+                                            <p style="margin: 2px 0">
+                                                <img style="vertical-align: middle; height: 0.4rem" src={path}/>
                                                 <span style="vertical-align: middle">{format!(" There is {word} path from the {src} to the {dst}")}</span>
                                             </p>
                                         }
                                     })}
+
+                                    <TheoryLink/>
                                 </div>
                             }
                         },
@@ -310,24 +399,32 @@ fn App() -> Html {
                             <div>
                                 <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data need to be downloaded once initially."}</p>
                                 <button
-                                    style="font-size: inherit"
+                                    style="font-size: inherit; margin-right: 1em"
                                     onclick={download_solver}
                                 >
                                     {"download solver"}
                                 </button>
-                                <a href="todo.pdf" target="_blank" style="margin-left: 1em">
-                                    <button
-                                        style="font-size: inherit"
-                                    >
-                                        {"read the theory"}
-                                    </button>
-                                </a>
+                                <TheoryLink/>
                             </div>
                         },
                     }
                 }
             </div>
         </div>
+    }
+}
+
+#[function_component]
+fn TheoryLink() -> Html {
+    html! {
+        <a href="todo.pdf" target="_blank">
+            <span style="vertical-align: middle">
+                {"read the theory"}
+            </span><img
+                src="img/external-link.svg"
+                style="height: 0.4rem; margin: 1px 0 0 2px; vertical-align: middle"
+            />
+        </a>
     }
 }
 
@@ -342,6 +439,7 @@ struct ProgressBarSegmentProps {
     solvability: Solvability,
     len: i32,
     side: Side,
+    callback: Callback<i32>,
 }
 
 #[function_component]
@@ -350,11 +448,12 @@ fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
         solvability,
         len,
         side,
+        callback,
     } = props;
-    let (color, icon, borderstyle) = match solvability {
-        Solvability::Yes => ("#555", "img/yes.svg", "solid"),
-        Solvability::No => ("#822", "img/no.svg", "dotted"),
-        Solvability::Maybe => ("#882", "img/maybe.svg", "dashed"),
+    let (color, borderstyle, clickable) = match solvability {
+        Solvability::Yes => ("#555", "solid", true),
+        Solvability::No => ("#822", "dotted", false),
+        Solvability::Maybe => ("#882", "dashed", false),
     };
     let outer_margin = 4;
     let inner_margin = if *len > 0 { outer_margin } else { 0 };
@@ -363,12 +462,36 @@ fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
         Side::Right => format!("0 {outer_margin}px 0 {inner_margin}px"),
     };
 
-    // todo: make it clickable
+    let div_ref = use_node_ref();
+
+    let classes = format!(
+        "progress-bar-segment {}",
+        if clickable { "clickable" } else { "" }
+    );
+
+    let onclick = {
+        let callback = callback.clone();
+        let div_ref = div_ref.clone();
+        let len = *len;
+        Callback::from(move |ev: MouseEvent| {
+            let Some(div) = div_ref.cast::<HtmlElement>() else {
+                return;
+            };
+            let fraction = ev.offset_x() as f64 / div.client_width() as f64;
+            let position = ((fraction * len as f64) as i32).min(len - 1).max(0);
+
+            callback.emit(position);
+        })
+    };
+
     html! {
-        <div style={format!("flex-grow: {len}; flex-shrink: 1; flex-basis: auto; margin: {margins}; border-top: 1px {borderstyle} {color}; transition: all 200ms ease; height: 0")}>
+        <div ref={div_ref} class={classes} style={format!("flex-grow: {len}; margin: {margins}")} onclick={onclick}>
+            <div style={format!("border-top-style: {borderstyle}; border-top-color: {color}")}>
+            </div>
         </div>
     }
 }
+
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
     yew::Renderer::<App>::new().render();

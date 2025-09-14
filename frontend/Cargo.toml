@@ -13,3 +13,4 @@ common = { path = "../common" }
 gloo-net = "0.6.0"
 wasm-bindgen-futures = "0.4.50"
 web-sys = { version = "0.3.78", features = ["HtmlElement"] }
+gloo-timers = { version = "0.3.0", features = ["futures"] }

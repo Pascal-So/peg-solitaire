@@ -33,18 +33,20 @@ impl Arrangement {
         Self { pegs }
     }
 
+    pub fn check_move_backwards(&self, src: Coord, dst: Coord) -> Option<MoveInfo> {
+        // let mut moved_idx = None;
+        // let mut eliminated_idx = None;
+
+        let mid = get_move_middle(src, dst)?;
+
+        todo!()
+    }
+
     pub fn check_move(&self, src: Coord, dst: Coord) -> Option<MoveInfo> {
         let mut moved_idx = None;
         let mut eliminated_idx = None;
 
-        let (dx, dy) = dst - src;
-        if !(dx.abs() == 2 && dy == 0 || dx == 0 && dy.abs() == 2) {
-            log::info!("Moves must be 2-jumps");
-            return None;
-        }
-        let mid = src
-            .shift(dx / 2, dy / 2)
-            .expect("center between valid positions should be valid");
+        let mid = get_move_middle(src, dst)?;
 
         for (i, p) in self.pegs.iter().enumerate() {
             if !p.alive {
@@ -74,6 +76,10 @@ impl Arrangement {
             std::mem::swap(&mut move_info.src, &mut move_info.dst);
         }
         assert_eq!(self.pegs[move_info.moved_idx].coord, move_info.src);
+        assert_eq!(
+            self.pegs[move_info.eliminated_idx].alive,
+            dir == Direction::Forward
+        );
         self.pegs[move_info.eliminated_idx].alive = dir == Direction::Backward;
         self.pegs[move_info.moved_idx].coord = move_info.dst;
         self
@@ -107,6 +113,7 @@ pub struct MoveInfo {
     eliminated_idx: usize,
     src: Coord,
     dst: Coord,
+    // todo: store mid coordinate
 }
 
 impl GameState {
@@ -162,8 +169,11 @@ impl GameState {
                     log::info!("running solver for direction {dir:?}");
                     match solve_with_bloom_filter(pos, bloom_filter, dir) {
                         common::SolveResult::Solved(jumps) => {
-                            let mut moves =
-                                convert_jump_sequence_to_moves(self.arrangement.clone(), &jumps);
+                            let mut moves = convert_jump_sequence_to_moves(
+                                self.arrangement.clone(),
+                                &jumps,
+                                dir,
+                            );
                             moves.reverse();
                             *path = Some(moves);
                         }
@@ -197,9 +207,9 @@ impl GameState {
         }
     }
 
-    pub fn apply_move(mut self, move_info: MoveInfo) -> Self {
-        self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
-        self.update_solve_paths(move_info, Direction::Forward);
+    fn apply_move_inner(mut self, move_info: MoveInfo, dir: Direction) -> Self {
+        self.arrangement = self.arrangement.apply_move(move_info, dir);
+        self.update_solve_paths(move_info, dir);
 
         self.history.push(HistoryEntry::Move(move_info));
         if self.redo.pop() != Some(HistoryEntry::Move(move_info)) {
@@ -207,6 +217,24 @@ impl GameState {
         }
 
         self
+    }
+    pub fn apply_move(self, move_info: MoveInfo) -> Self {
+        self.apply_move_inner(move_info, Direction::Forward)
+    }
+
+    pub fn move_along_solve_path(self, dir: Direction) -> Self {
+        let path = match dir {
+            Direction::Forward => self.path_to_end.as_ref(),
+            Direction::Backward => self.path_from_start.as_ref(),
+        };
+
+        if let Some(path) = path
+            && let Some(&move_info) = path.last()
+        {
+            self.apply_move_inner(move_info, dir)
+        } else {
+            self
+        }
     }
 
     pub fn can_undo(&self) -> bool {
@@ -319,7 +347,11 @@ impl GameState {
 /// where to where we move a peg, but also which peg is being moved.
 ///
 /// Preconditions: jump sequence must be applicable to the given arrangement
-fn convert_jump_sequence_to_moves(mut arrangement: Arrangement, jumps: &[Jump]) -> Vec<MoveInfo> {
+fn convert_jump_sequence_to_moves(
+    mut arrangement: Arrangement,
+    jumps: &[Jump],
+    dir: Direction,
+) -> Vec<MoveInfo> {
     let mut moves = vec![];
 
     for &jump in jumps {
@@ -346,6 +378,20 @@ pub enum Solvability {
     Yes,
     No,
     Maybe,
+}
+
+/// If src and dst are exactly 2 apart in an axis aligned direction, get the
+/// coordinate of the hole between them.
+fn get_move_middle(src: Coord, dst: Coord) -> Option<Coord> {
+    let (dx, dy) = dst - src;
+    if !(dx.abs() == 2 && dy == 0 || dx == 0 && dy.abs() == 2) {
+        return None;
+    }
+    let mid = src
+        .shift(dx / 2, dy / 2)
+        .expect("center between valid positions should be valid");
+
+    Some(mid)
 }
 
 #[cfg(test)]
@@ -416,7 +462,11 @@ mod tests {
             Jump::from_coordinate_pair(Coord::new(-2, 0).unwrap(), Coord::center()).unwrap(),
         ];
 
-        let moves = convert_jump_sequence_to_moves(game_state.arrangement.clone(), &jumps);
+        let moves = convert_jump_sequence_to_moves(
+            game_state.arrangement.clone(),
+            &jumps,
+            Direction::Forward,
+        );
 
         for m in moves {
             game_state = game_state.apply_move(m);
