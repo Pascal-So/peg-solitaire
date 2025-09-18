@@ -121,22 +121,24 @@
   /// Capitalize all characters in the text, e.g. "THIS IS AN ALLCAPS HEADING"
   let allcaps = upper
 
+
+  import "@preview/decasify:0.10.1": titlecase
   /// Capitalize major words, e.g. "This is a Word-Caps Heading"
-  /// Heuristic until we have https://github.com/typst/typst/issues/1707
   let wordcaps(body) = {
     if body.has("text") {
-      let txt = body.text //lower(body.text)
-      let words = txt.matches(regex("^()(\\w+)")) // first word
-      words += txt.matches(regex("([.:;?!]\s+)(\\w+)")) // words after punctuation
-      words += txt.matches(regex("()(\\w{4,})")) // words with 4+ letters
-      for m in words {
-        let (pre, word) = m.captures
-        word = upper(word.at(0)) + word.slice(1)
-        txt = txt.slice(0, m.start) + pre + word + txt.slice(m.end)
-      }
-      txt
+      titlecase(body)
     } else if body.has("children") {
-      body.children.map(it => wordcaps(it)).join()
+      let f(acc, current) = {
+        if current.has("text") {
+          acc.at("streak") += current
+        } else {
+          acc.at("text") += titlecase(acc.at("streak")) + wordcaps(current)
+          acc.at("streak") = ""
+        }
+        acc
+      }
+      let res = body.children.fold((streak: "", text: ""), f)
+      res.at("text") + titlecase(res.at("streak"))
     } else {
       body
     }
