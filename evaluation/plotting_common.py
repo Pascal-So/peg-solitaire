@@ -16,6 +16,10 @@ category_markers = {
 
 def setup_plotting_style():
     matplotlib.style.use("ggplot")
+    plt.rcParams.update({
+        # "text.usetex": True,
+        "font.family": "serif"
+    })
 
 def setup_bytes_formatters(axis, minor = False):
     axis.set_major_formatter(plt.FuncFormatter(bytes_to_human_readable))
