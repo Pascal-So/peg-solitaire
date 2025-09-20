@@ -72,15 +72,22 @@ The board starts out with 32 of its 33 holes occupied. Since every move removes 
 start position to the end position will always consist of exactly 31 moves. Note that there are many possible solution
 sequences.
 
-When playing without any clear strategy, the player will often get stuck in a situation where no more moves are available,
+When playing without any clear strategy, the player will often get stuck in a dead end where no more moves are available,
 for example when the remaining pegs are spread out across the board such that no two of them are directly adjacent anymore.
 
+== State Space
 
+An analysis of the state space can be done by simply enumeriating all possible board positions and accumulating whatever
+statistics we are interested in.
 
-// todo: figure showing the size of the state space growing/shrinking, including solvable subset.
+It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
+of those unsolvable positions are not reachable from the start position. Similarly, there are some positions that cannot be
+reached from the start, but that could still be solved if we were to manually set up the board to one of these positions
+before the game. @fig:statespace shows an overview of the relations between these sets.
 
-
-.. 50% of positions after 9 moves (23 pegs remaining) are unsolvable
+#figure(
+  caption: "Overview of the state space, comparing the number of solvable positions to the total number of positions.",
+) <fig:statespace>
 
 
 #figure(
@@ -123,6 +130,14 @@ for example when the remaining pegs are spread out across the board such that no
 
 
 = Solver
+
+The standard method to automatically solve such a game would be some kind of tree search. At every position, we
+enumerate all the valid moves that could be applied to the position, and then perform the same search method at the
+descendant positions. By following this method, we will either eventually reach the end position, or run out of new
+positions to visit.
+
+To prevent unnecessary work, we should make sure that every position will only be visited at most once. For this
+purpose, we can store one bit per position, remembering if that position has already been visited.
 
 Simple visit map, 2^33 bits = 2^30 bytes, 1GB.
 
@@ -172,7 +187,7 @@ We summarize the essence of de Bruijn's paper here for the reader's convenience.
   // TODO state this as conclusion the other way around: $P$ and $Q$ differ by only this one move. To show that $A(P) = A(Q)$, we thus require that $p^i + p^(i+1) = p^(i+2)$
 ]<proof>
 
-The proof for $B$ 
+The proof for $B$ follows the same procedure.
 
 Note that this trick should only be applied once per search, namely at the starting position of the search. If we find that the given starting position is in the same equivalence class as the end position, then we perform the normal search algorithm as described previously. It does not make sense to re-apply this check at every visited position in the search, since all the visited positions are reachable from the given starting position, and therefore fall into the same equivalence class.
 
