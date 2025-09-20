@@ -17,7 +17,7 @@ category_markers = {
 def setup_plotting_style():
     matplotlib.style.use("ggplot")
     plt.rcParams.update({
-        # "text.usetex": True,
+        "text.usetex": True,
         "font.family": "serif"
     })
 

@@ -75,21 +75,6 @@ sequences.
 When playing without any clear strategy, the player will often get stuck in a dead end where no more moves are available,
 for example when the remaining pegs are spread out across the board such that no two of them are directly adjacent anymore.
 
-== State Space
-
-An analysis of the state space can be done by simply enumeriating all possible board positions and accumulating whatever
-statistics we are interested in.
-
-It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
-of those unsolvable positions are not reachable from the start position. Similarly, there are some positions that cannot be
-reached from the start, but that could still be solved if we were to manually set up the board to one of these positions
-before the game. @fig:statespace shows an overview of the relations between these sets.
-
-#figure(
-  caption: "Overview of the state space, comparing the number of solvable positions to the total number of positions.",
-) <fig:statespace>
-
-
 #figure(
   placement: top,
   caption: "A typical progression in the game. The start position has every hole except for the central hole occupied. Every move removes one single peg, until we're left with only the central hole occupied in the end position.",
@@ -128,6 +113,34 @@ before the game. @fig:statespace shows an overview of the relations between thes
   })
 ) <fig:progression>
 
+== State Space
+
+An analysis of the state space can be done by simply enumeriating all possible board positions and accumulating whatever
+statistics we are interested in.
+
+It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
+of those unsolvable positions are not reachable from the start position. Similarly, there are some positions that cannot be
+reached from the start, but that could still be solved if we were to manually set up the board to one of these positions
+before the game. @fig:statespace shows an overview of the relations between these sets.
+
+#figure(
+  caption: [
+    #let r(col) = [#box(rect(width: 8pt, height: 1.7pt, fill: col), baseline: -2pt)#sym.space.nobreak]
+
+    Overview of the state space. We compare four different sets:
+    #r(rgb(247,113,137))Solvable, the set of positions that can reach the end,
+    #r(rgb(80,177,49))Reachable, the positions that can be reached from the start,
+    #r(rgb(54,173,164))the intersection of those two sets,
+    #r(rgb("#666"))the set of all possible positions, regardless of whether they can actually be reached during normal play.
+  ],
+  placement: bottom,
+  scope: "parent",
+  image("img/state-space.png")
+) <fig:statespace>
+
+One interesting observation is that during the beginning it's very hard to mess anything up, since almost all of
+the positions that can be reached within the first five moves are solvable. During the later stages however, the player
+is almost guaranteed to fail if they just perform random moves.
 
 = Solver
 
