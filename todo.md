@@ -27,3 +27,7 @@
 * Plot like in "Checkers is Solved" for state space size
 * Section about reverse solving
 * section about GF4
+
+## Future Work
+
+* Reachable state space in reversible Peg Solitaire?

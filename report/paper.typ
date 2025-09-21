@@ -22,7 +22,7 @@
   paper-size: "a4",
   // funding: "Work supported by ...",
   abstract: [
-    Finding a sequence of moves to solve a Peg Solitaire game is trivial if you have 1GB of RAM to spare. This might however
+    Finding a sequence of moves to solve a Peg Solitaire game is trivial if you have 1GiB of RAM to spare. This might however
     not be the case on a mobile web browser. Therefore, we optimize a WASM-compatible solver not just
     for runtime, but also RAM usage and total download size.
 
@@ -113,9 +113,18 @@ for example when the remaining pegs are spread out across the board such that no
   })
 ) <fig:progression>
 
+Our goal in this work is to develop a tool that players can use to automatically find a sequence of moves to reach the
+end position if such a sequence exists, or to tell the player that they have entered an unsolvable position.
+
+To make the Peg Solitaire solver tool accessible to a wide audience,
+it makes sense to deploy it as a WebAssembly-based application so that users can access it from their desktop or mobile device
+without having to install anything. This also allows us to deploy the tool without having to run any application-specific
+software on the server, instead allowing us to rely just on a static file server.
+
 == State Space
 
-An analysis of the state space can be done by simply enumeriating all possible board positions and accumulating whatever
+A board has 33 holes which all can either be occupied or empty, which means that there are $2^33$ different positions.
+On modern hardware, it's easily feasible to simply enumerate the entire state space so that we can accumulate whatever
 statistics we are interested in.
 
 It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
@@ -126,7 +135,6 @@ before the game. @fig:statespace shows an overview of the relations between thes
 #figure(
   caption: [
     #let r(col) = [#box(rect(width: 8pt, height: 1.7pt, fill: col), baseline: -2pt)#sym.space.nobreak]
-
     Overview of the state space. We compare four different sets:
     #r(rgb(247,113,137))Solvable, the set of positions that can reach the end,
     #r(rgb(80,177,49))Reachable, the positions that can be reached from the start,
@@ -150,21 +158,89 @@ descendant positions. By following this method, we will either eventually reach 
 positions to visit.
 
 To prevent unnecessary work, we should make sure that every position will only be visited at most once. For this
-purpose, we can store one bit per position, remembering if that position has already been visited.
+purpose, we can store one bit per position, remembering if that position has already been visited. With $2^33$ positions,
+this sums up to exactly $2^30$ bytes, or 1 GiB.
 
-Simple visit map, 2^33 bits = 2^30 bytes, 1GB.
+While this is a perfectly reasonable amount of memory to allocate in desktop software nowadays, it is still a large amount
+in the context of software running in the browser as WASM. V8, one of the most widely used WASM runtimes, had a memory
+limit of 2 GiB in place up until 2020 @haas_up_2020. This would technically be enough to run the simple tree search, but
+it still demonstrates that WASM-applications are not expected to use this much memory in most cases. To align more closely
+with user expectations, we instead want to use a method that gets by with much less memory.
+
+The essence of our strategy is to still perform a tree search, specifically depth-first-search, but avoid storing a map
+of visited positions. Of course just running the DFS without a visit map leads to exponential runtime, since we're
+re-visiting positions that have already been explored. Note however, that the re-visited positions must be positions that
+are unsolvable anyway. If the position had been solvable, then we would have reached the end, and thus never re-visited
+it.
+
+Our main idea is therefore to simply prioritize a correct path during the DFS (duh). Recall that only around 2% of the
+positions are solvable. If the algorithm has a fast method to look up whether the position that we're about to visit is
+solvable, then we can avoid visiting unsolvable positions in the first place.
+
+Of course 2% in this context is still a large number, in total there are 187,636,299 solvable positions, so we can't
+store them all on the client. To achieve the speedup by not re-visiting lots of unsolvable nodes, it is sufficient if
+we have an approximation of this set of solvable positions, rather than knowing it exactly.
 
 == Bloom Filters
 
-#figure(
-  image("img/k-hash-methods.png"),
-  scope: "parent",
-  placement: bottom,
-  caption: [a plot],
-) <fig:plot>
+Bloom Filters are probabilistic datastructures that provide two operations: we can add an element to a set, and we can
+ask whether a given element is present in the set @bloom_spacetime_1970. A bloom filter requires much less storage than
+simply storing all of the elements, but the downside is that there is a small chance of getting an incorrect answer when
+checking for presence.
+
+If an element is in the set, then a bloom filter will always correctly respond "Yes" when asking for that element. But
+if an element is not present, there is still a small chance for the filter to think it is there, i.e. there might be
+false positives but never false negatives.
+
+This is exactly what we can use for our tree search. We build a bloom filter of all solvable positions, and then during
+the search we only visit positions where the presence check returns "Yes". We will therefore sometimes explore unnecessary
+positions, but we will never abandon a solvable path.
+
+Bloom filters provide us with a trade-off parameter that we can tune. If we make the bloom filter more accurate, we
+waste less time during tree search, but this increases the storage size of the bloom filter, meaning that we have to
+download and store more data to the users's device.
 
 == Rotations and Mirroring
 <sec:mirroring>
+
+Another way to improve the accuracy of a bloom filter, beyond increasing the size of the filter, is to store fewer
+elements in the filter.
+
+The peg solitaire is four-fold rotationally symmetric, as well as reflection symmetric. This also applies to the end
+position. Therefore, if we know that a given position is solvable, then we also know that any rotation or mirroring of
+that position is solvable.
+
+This can be used to reduce the number of positions that we need to store in the bloom filter, from 187,636,299 down to
+23,475,688. The reduction factor is slightly less than 8 because we're not eliminating positions that are themselves
+already symmetric.
+
+We design a normalization function to select one specific orientation of a given position that we then insert into
+the bloom filter. The exact method by which that orientation is selected is not relevant, as long as our choice is
+applied consistently. In our implementation we first list all eight candidates as 33-bit binary numbers where every
+hole is converted to one bit, assembled row-wise. From this list we select the candidate with the lowest numeric value.
+
+#figure(
+  caption: [
+    These two positions are equivalent if we ignore mirroring and rotation. If
+    we know that the left one is solvable, then the right one must also be
+    solvable.
+  ],
+  cetz.canvas(length: 0.28cm, {
+    import cetz.draw: *
+
+    board("mid")
+
+    content((8.6, 0), text(1.5em)[#sym.arrow.l.r])
+    content((6.4, 0), text(1.5em)[#sym.arrow.cw])
+
+    translate(x: 15, y: 0)
+    rotate(270deg)
+    scale(y: -1)
+
+    board("mid")
+  })
+) <fig:mirroring>
+
 
 #let GF4 = $"GF"(4)$
 
@@ -203,6 +279,17 @@ We summarize the essence of de Bruijn's paper here for the reader's convenience.
 The proof for $B$ follows the same procedure.
 
 Note that this trick should only be applied once per search, namely at the starting position of the search. If we find that the given starting position is in the same equivalence class as the end position, then we perform the normal search algorithm as described previously. It does not make sense to re-apply this check at every visited position in the search, since all the visited positions are reachable from the given starting position, and therefore fall into the same equivalence class.
+
+= Parameter Selection and Evaluation
+
+TODO
+
+#figure(
+  image("img/k-hash-methods.png"),
+  scope: "parent",
+  placement: bottom,
+  caption: [a plot],
+) <fig:plot>
 
 = Forcing Intermediate Positions
 

@@ -16,6 +16,7 @@ category_markers = {
 
 def setup_plotting_style():
     matplotlib.style.use("ggplot")
+    matplotlib.rcParams['figure.dpi'] = 300
     plt.rcParams.update({
         "text.usetex": True,
         "font.family": "serif"
