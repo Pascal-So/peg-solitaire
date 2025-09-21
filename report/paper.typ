@@ -6,13 +6,20 @@
 #import "@preview/ctheorems:1.1.3": *
 #show: thmrules.with(qed-symbol: $square$)
 
+#let thm-padding = 1.5em
 #let theorem = thmplain(
   "theorem",
   "Theorem",
   base: none,
-  titlefmt: strong
+  titlefmt: strong,
+  inset: (top: 0em, left: thm-padding, right: thm-padding),
 )
-#let proof = thmproof("proof", "Proof")
+#let proof = thmproof(
+  "proof",
+  "Proof",
+  inset: (top: 0em, left: thm-padding, right: thm-padding),
+)
+
 
 #show: jacow.with(
   title: [Precomputing Peg Solitaire],
@@ -32,7 +39,6 @@
     of symmetries in the game.
   ],
   date: [#datetime.today().display("[month repr:long] [year]")],
-  // show-grid: true,
 )
 
 
@@ -252,17 +258,25 @@ This is especially relevant if we want to provide a user interface where the pla
 
 A significant optimisation would be possible by partitioning game positions into equivalence classes that are closed under moves. If we can then figure out that a given position is not in the same class as the end position, then we immediately know that the given position is unsolvable, since we can only ever reach positions that are in the same class as where we started.
 
-// todo: link to some introduction to GF4?
-
 One possible mapping from game positions to equivalence classes was published by de Bruijn by making use of Galois fields @nicolaas_govert_de_bruijn_solitaire_1972, specifically $GF4$ (also denoted $bb(F)_4$). He defines two functions $A$ and $B$ that both map a position $P$ to $GF4$. Since $GF4$ has four elements, this means that the pair $(A(P), B(P))$ can take on $4 times 4 = 16$ values.
 
 $
-A(P) = sum_(p in P) "TODO"
+A(P) = sum_((k,l) in P) p^(k + l),
 $
 
-Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$, i.e., we use $p$ to denote one of the elements that are neither the additive nor multiplicative identity.
+where we say that $(k,l) in P$ if $k$ and $l$ are natural numbers and represent the coordinates of a peg present in
+position $P$ such that the center hole has coordinates (0, 0).
 
-We summarize the essence of de Bruijn's paper here for the reader's convenience.
+Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$, i.e., we use $p$ to denote one of the
+elements that are neither the additive nor multiplicative identity.
+
+The function $B$ takes almost the same form:
+
+$
+B(P) = sum_((k,l) in P) p^(k - l)
+$
+
+We summarize the proof from de Bruijn's paper here in a slighly compressed form for the reader's convenience.
 
 #theorem([$A$ is preserved under moves])[\
   $P arrow.r Q arrow.r.double A(P) = A(Q)$
@@ -271,9 +285,27 @@ We summarize the essence of de Bruijn's paper here for the reader's convenience.
 #proof[\
   Assume that the move happens in a direction where coordinates increase, such that the locations where pegs are removed contribute values $p^(i)$ and $p^(i+1)$, and the location where a peg is added contributes $p^(i+2)$.
 
-  TODO do the proof
+  From the definition of #GF4 we can verify that
 
-  // TODO state this as conclusion the other way around: $P$ and $Q$ differ by only this one move. To show that $A(P) = A(Q)$, we thus require that $p^i + p^(i+1) = p^(i+2)$
+  $
+  1 + p = p^2.
+  $
+
+  Using this, we get
+
+  $
+  p^i + p^(i+1) &= p^i(1+p) \
+  &= p^i p^2 \
+  &= p^(i+2),
+  $
+
+  which is the term that we add at the same time as removing the other two terms. Therefore the sum does not change after
+  the move and we get that $A(P) = A(Q)$.
+
+  It remains to show that the same also holds when the move is taken in the direction of decreasing coordinates. Let the
+  coordinates where pegs are removed still be $p^i$ and $p^(i+1)$, but now a peg is added at $p^(i-1)$ instead.
+
+  Because the multiplicative group of #GF4 has order 3, we know that $p^3 = 1$ and therefore $p^(i-1) = p^(i+2)$.
 ]<proof>
 
 The proof for $B$ follows the same procedure.
@@ -281,8 +313,6 @@ The proof for $B$ follows the same procedure.
 Note that this trick should only be applied once per search, namely at the starting position of the search. If we find that the given starting position is in the same equivalence class as the end position, then we perform the normal search algorithm as described previously. It does not make sense to re-apply this check at every visited position in the search, since all the visited positions are reachable from the given starting position, and therefore fall into the same equivalence class.
 
 = Parameter Selection and Evaluation
-
-TODO
 
 #figure(
   image("img/k-hash-methods.png"),
