@@ -331,7 +331,64 @@ search, since all the visited positions are reachable from the given starting po
 equivalence class. In particular, this trick will never improve the performance of a search from the normal start
 position.
 
+== Compression
+
+Our switch away from a normal tree search to the bloom filter assisted search was motivated by RAM usage. While the
+bloom filter requires much less RAM, the downside now is that the filter actually has to be downloaded over the network
+to the client. Since the filter sizes are in the megabytes (see #link(<sec:evaluation>)[evaluation section]), the
+download size is now the bigger concern.
+
+We can somewhat counteract the slow download speeds by making use of HTTP compression. This means that we can upload a
+compressed version of the bloom filter to our static file server along with the original, so that if a client supports
+the compressed format, it does not have to download the full file. Decompression is then done automatically by the
+client browser, and our WASM code does not have to be aware of the compression.
+
 = Parameter Selection and Evaluation
+<sec:evaluation>
+
+In this section, we perform some evaluations in order to tune the Bloom Filter parameters available to us and to see the
+overall performance that we end up with.
+
+We aim to optimize two statistics:
+- The solver performance, i.e. the number of operations that have to be performed in order to find a sequence of moves
+  to solve a given position, or to determine that the position is unsolvable.
+- The download size of the compressed bloom filter that we have to transmit to the client. For these evaluations, we
+  specifically select the Brotli compression format, since it is widely supported by browsers and achieves competitive
+  compression ratios @alakuijala_brotli_2016.
+
+== Parameter $k$
+
+Bloom Filters compute $k$ different hashes of the given input @bloom_spacetime_1970. Assuming that the hashes are
+uncorrelated, the optimal $k$ for the lowest false positive rate can be computed given the number of elements in the
+filter and the total size of the input space @thomas_hurst_bloom_nodate.
+
+#figure(
+  image("img/k.png"),
+  placement: bottom,
+  caption: [
+    Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
+    filters, increasingly larger $k$ yield better false positive rates.
+  ],
+) <fig:plot>
+
+
+$
+k = "round"(m/n log(2))
+$
+
+Note however, that a larger $k$ increases the number of bits that are set to 1 in the bloom filter. This negatively
+affects the compression ratios achieved by Brotli and other methods.
+
+#figure(
+  image("img/k-vs-compression.png"),
+  placement: bottom,
+  caption: [
+    Comparing false positive rates for compressed and uncompressed bloom filters with different values of $k$. While
+    $k = 3$ is optimal among all uncompressed filters of size 12 MB, we see that $k = 1$ yields a lower false positive
+    rate at 12 MB if we allow for Brotli compression.
+  ],
+) <fig:plot>
+
 
 TODO:
 
@@ -342,7 +399,7 @@ TODO:
 #figure(
   image("img/round-vs-primes.png"),
   // scope: "parent",
-  // placement: bottom,
+  placement: bottom,
   caption: [a plot],
 ) <fig:plot>
 

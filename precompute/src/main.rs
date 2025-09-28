@@ -8,15 +8,15 @@ use std::{
 };
 
 use primal::Primes;
-use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, seq::SliceRandom};
 use rand_pcg::Pcg64Mcg;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
-use common::{all_jumps, debruijn::de_bruijn_solvable, BloomFilter, Jump, Position};
+use common::{BloomFilter, Jump, Position, all_jumps, debruijn::de_bruijn_solvable};
 use precompute::{
-    positions::{get_difficult_positions, get_solvable_positions},
     VisitMap,
+    positions::{get_difficult_positions, get_solvable_positions},
 };
 
 fn build_bloom_filter(size: u32, solvability_map: &VisitMap, k: u32) -> BloomFilter {
@@ -291,51 +291,21 @@ fn prime_candidates(range: Range<u32>) -> Vec<u32> {
     candidates
 }
 
-fn evaluate_solver_steps(filter: &BloomFilter) -> Vec<u64> {
-    let mut steps = vec![];
+#[derive(Serialize)]
+struct SolverStats {
+    max_steps: u64,
+    average_steps: f64,
+}
+
+fn evaluate_solver_stats(filter: &BloomFilter, start_positions: &[Position]) -> SolverStats {
+    let mut total_steps = 0;
+    let mut max_steps = 0;
 
     #[derive(Eq, PartialEq, Debug)]
     enum Result {
         Solved,
         NotSolved,
         TimedOut,
-        Suspended(usize),
-    }
-
-    fn step_inner_reshuffle(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        rng: &mut impl Rng,
-        limit: u64,
-    ) -> Result {
-        if *nr_steps >= limit {
-            return Result::TimedOut;
-        }
-        *nr_steps += 1;
-
-        let mut jumps = all_jumps();
-        jumps.shuffle(rng);
-
-        for jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-                if next == end {
-                    return Result::Solved;
-                }
-                if filter.query(next.normalize()) {
-                    match step_inner_reshuffle(filter, next, nr_steps, end, rng, limit) {
-                        Result::Solved => return Result::Solved,
-                        Result::NotSolved => {}
-                        Result::TimedOut => return Result::TimedOut,
-                        Result::Suspended(_) => unreachable!(),
-                    }
-                }
-            }
-        }
-
-        Result::NotSolved
     }
 
     fn step_inner_preshuffled(
@@ -362,7 +332,6 @@ fn evaluate_solver_steps(filter: &BloomFilter) -> Vec<u64> {
                         Result::Solved => return Result::Solved,
                         Result::NotSolved => {}
                         Result::TimedOut => return Result::TimedOut,
-                        Result::Suspended(_) => unreachable!(),
                     }
                 }
             }
@@ -371,143 +340,58 @@ fn evaluate_solver_steps(filter: &BloomFilter) -> Vec<u64> {
         Result::NotSolved
     }
 
-    fn step_inner_with_suspense(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        jumps: &[Jump; 76],
-        limit: u64,
-    ) -> Result {
-        if *nr_steps >= limit {
-            return Result::TimedOut;
-        }
-        *nr_steps += 1;
-
-        let mut suspended = vec![];
-
-        for (idx, &jump) in jumps.iter().enumerate() {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-                if next == end {
-                    return Result::Solved;
-                }
-                if filter.query(next.normalize()) {
-                    match step_inner_with_suspense(filter, next, nr_steps, end, jumps, limit) {
-                        Result::Solved => return Result::Solved,
-                        Result::NotSolved => {
-                            if (next.0 + *nr_steps) % 193 <= 1 {
-                                return Result::Suspended(idx);
-                            }
-                        }
-                        Result::TimedOut => return Result::TimedOut,
-                        Result::Suspended(idx) => {
-                            suspended.push(idx);
-                        }
-                    }
-                }
-            }
-        }
-
-        // todo: iterate over suspended states
-
-        Result::NotSolved
-    }
-
-    fn step_inner_with_cache(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        jumps: &[Jump; 76],
-        limit: u64,
-        cache: &mut HashSet<Position>,
-    ) -> Result {
-        if *nr_steps >= limit {
-            return Result::TimedOut;
-        }
-        *nr_steps += 1;
-
-        let mut has_descended = false;
-
-        for &jump in jumps.iter() {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-                if next == end {
-                    return Result::Solved;
-                }
-                if filter.query(next.normalize()) && !cache.contains(&next.normalize()) {
-                    has_descended = true;
-                    match step_inner_with_cache(filter, next, nr_steps, end, jumps, limit, cache) {
-                        Result::Solved => return Result::Solved,
-                        Result::NotSolved => {}
-                        Result::TimedOut => return Result::TimedOut,
-                        Result::Suspended(_) => unreachable!(),
-                    }
-                }
-            }
-        }
-
-        if has_descended {
-            cache.insert(pos.normalize());
-        }
-
-        Result::NotSolved
-    }
-
-    let mut largest_cache: usize = 0;
     let start_time = Instant::now();
-    let nr_samples = 100;
-    for i in 0..nr_samples {
-        let mut rng = Pcg64Mcg::seed_from_u64(i);
+    let nr_samples = (10000 / start_positions.len() as u64).max(100);
+    let mut actual_nr_samples = 0;
+    for start_pos in start_positions {
+        for i in 0..nr_samples {
+            let mut rng = Pcg64Mcg::seed_from_u64(i);
 
-        let mut nr_steps = 0;
-        let pos = Position::default_start();
-        let end = Position::default_end();
+            let mut nr_steps = 0;
+            let end = Position::default_end();
 
-        let mut jumps = all_jumps();
-        jumps.shuffle(&mut rng);
+            let mut jumps = all_jumps();
+            jumps.shuffle(&mut rng);
 
-        let nr_attempts = 5;
-        for attempt in 0..nr_attempts {
-            let last_attempt = attempt == nr_attempts - 1;
+            let nr_attempts = 100;
+            let limit = 50;
+            for attempt in 0..nr_attempts {
+                let last_attempt = attempt + 1 == nr_attempts;
 
-            let mut cache = HashSet::new();
-            let solved = step_inner_with_cache(
-                filter,
-                pos,
-                &mut nr_steps,
-                end,
-                &jumps,
-                if last_attempt { 1 << 17 } else { 60 },
-                &mut cache,
-            );
-            match solved {
-                Result::Solved => {
-                    largest_cache = largest_cache.max(cache.len());
-                }
-                Result::NotSolved => panic!("puzzle was not solved using bloom filter"),
-                Result::TimedOut => {
-                    jumps.shuffle(&mut rng);
-                }
-                Result::Suspended(_) => {
-                    println!("puzzle was suspended");
-                    jumps.shuffle(&mut rng);
+                jumps.shuffle(&mut rng);
+
+                nr_steps = 0;
+                let solved =
+                    step_inner_preshuffled(filter, *start_pos, &mut nr_steps, end, &jumps, limit);
+                match solved {
+                    Result::Solved | Result::NotSolved => {
+                        nr_steps += attempt * limit;
+                        break;
+                    }
+                    Result::TimedOut => {
+                        if last_attempt {
+                            nr_steps += attempt * limit;
+                            break;
+                        }
+                    }
                 }
             }
+
+            total_steps += nr_steps;
+            max_steps = max_steps.max(nr_steps);
+            actual_nr_samples += 1;
         }
-
-        steps.push(nr_steps);
     }
-
-    dbg!(largest_cache);
 
     println!(
-        "evaluated solver steps {nr_samples} times in {}s",
+        "evaluated solver steps {actual_nr_samples} times in {}s",
         start_time.elapsed().as_secs_f32()
     );
 
-    steps
+    SolverStats {
+        max_steps,
+        average_steps: total_steps as f64 / actual_nr_samples as f64,
+    }
 }
 
 fn round_candidates(range: Range<u32>) -> Vec<u32> {
@@ -631,113 +515,6 @@ fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
         .unwrap();
 }
 
-fn evaluate_various_positions(filter: &BloomFilter) {
-    let mut jumps = all_jumps();
-    let mut rng = Pcg64Mcg::seed_from_u64(0);
-
-    let mut start_positions = get_solvable_positions();
-    start_positions.push(Position::default_start());
-    let end_pos = Position::default_end();
-
-    #[derive(Eq, PartialEq, Debug)]
-    enum Result {
-        TimeOut,
-        Solved,
-        NotSolved,
-    }
-
-    fn step(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        jumps: &[Jump; 76],
-        cache: &mut HashSet<Position>,
-        limit: u64,
-    ) -> Result {
-        *nr_steps += 1;
-
-        if *nr_steps > limit {
-            return Result::TimeOut;
-        }
-
-        for &jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-
-                if next == end {
-                    return Result::Solved;
-                }
-
-                if !filter.query(next.normalize()) || cache.contains(&next.normalize()) {
-                    continue;
-                }
-
-                let result = step(filter, next, nr_steps, end, jumps, cache, limit);
-                match result {
-                    Result::TimeOut => return Result::TimeOut,
-                    Result::Solved => return Result::Solved,
-                    Result::NotSolved => {}
-                }
-            }
-        }
-
-        // if (pos.0 + *nr_steps * 11) % 17 < 2 {
-        cache.insert(pos.normalize());
-        // }
-
-        Result::NotSolved
-    }
-
-    let mut step_counts = vec![];
-
-    let limit = 1600;
-    let limit_per_attempt = 150;
-
-    for _ in 0..1000 {
-        for _ in 0..3 {
-            jumps.shuffle(&mut rng);
-        }
-
-        for start_pos in start_positions.clone() {
-            let mut nr_steps;
-            let mut attempt = 0;
-
-            loop {
-                attempt += 1;
-                jumps.shuffle(&mut rng);
-
-                nr_steps = 0;
-
-                let mut cache = HashSet::new();
-                let solved = step(
-                    filter,
-                    start_pos,
-                    &mut nr_steps,
-                    end_pos,
-                    &jumps,
-                    &mut cache,
-                    limit_per_attempt,
-                );
-
-                match solved {
-                    Result::Solved => {
-                        break;
-                    }
-                    Result::NotSolved => panic!("puzzle was not solved using bloom filter"),
-                    Result::TimeOut => {}
-                }
-            }
-
-            step_counts.push(nr_steps);
-            if attempt * limit_per_attempt > limit {
-                dbg!(attempt);
-            }
-        }
-        // println!("{step_counts:?}");
-    }
-}
-
 fn evaluate_difficult_positions(filter: &BloomFilter) {
     let mut jumps = all_jumps();
     let mut rng = Pcg64Mcg::seed_from_u64(0);
@@ -852,7 +629,10 @@ fn evaluate_difficult_positions(filter: &BloomFilter) {
             }
         }
 
-        println!("                  y: {nr_solved:5}, n: {nr_unsolved:5}, ?: {nr_timed_out:5}. positive children: {:?}", count_positive_children(filter, start_pos));
+        println!(
+            "                  y: {nr_solved:5}, n: {nr_unsolved:5}, ?: {nr_timed_out:5}. positive children: {:?}",
+            count_positive_children(filter, start_pos)
+        );
     }
 }
 
@@ -950,31 +730,36 @@ fn analyze_state_space() {
 }
 
 fn main() {
-    analyze_state_space();
-    return;
-    let prime_filter = BloomFilter::load_from_file("filters/filter_173378771_norm.bin");
-    evaluate_difficult_positions(&prime_filter);
+    // analyze_state_space();
+    // return;
+    // let prime_filter = BloomFilter::load_from_file("filters/filter_173378771_norm.bin");
+    // evaluate_difficult_positions(&prime_filter);
     // evaluate_various_positions(&BloomFilter::load_from_file(
     //     "filters/filter_083886080_norm.bin",
     // ));
 
-    return;
+    // return;
 
-    let mut solver_steps = vec![];
+    let mut solver_stats = vec![];
 
-    for (candidate_sizes, _) in get_candidates_groups() {
+    for (candidate_sizes, group) in get_candidates_groups() {
+        if group == "round_minus_one" {
+            continue;
+        }
+
         let results = candidate_sizes.par_iter().map(|&size| {
-            let filter = BloomFilter::load_from_file(format!("filter_{size:0>9}_norm.bin"));
-            let steps = evaluate_solver_steps(&filter);
-            (steps, size)
+            let filter =
+                BloomFilter::load_from_file(format!("filters/modulo/filter_{size:0>9}_1_norm.bin"));
+            let stats_default_start = evaluate_solver_stats(&filter, &[Position::default_start()]);
+            (stats_default_start, size)
         });
 
-        solver_steps.append(&mut results.collect());
+        solver_stats.append(&mut results.collect());
     }
 
     serde_json::to_writer_pretty(
-        std::fs::File::create("solver-steps-preshuffled-5-attempts-cache.json").unwrap(),
-        &solver_steps,
+        std::fs::File::create("solver-stats.json").unwrap(),
+        &solver_stats,
     )
     .unwrap();
 }
