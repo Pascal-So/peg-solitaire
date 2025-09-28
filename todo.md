@@ -24,9 +24,9 @@
 
 ## Report
 
-* Plot like in "Checkers is Solved" for state space size
-* Section about reverse solving
-* section about GF4
+* Plot: worst case for solving with round vs prime
+* Plot: Compression for Powers of two
+* false positive cluster sizes? link to that from the GF4 section intro
 
 ## Future Work
 

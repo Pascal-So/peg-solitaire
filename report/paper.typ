@@ -168,10 +168,7 @@ purpose, we can store one bit per position, remembering if that position has alr
 this sums up to exactly $2^30$ bytes, or 1 GiB.
 
 While this is a perfectly reasonable amount of memory to allocate in desktop software nowadays, it is still a large amount
-in the context of software running in the browser as WASM. V8, one of the most widely used WASM runtimes, had a memory
-limit of 2 GiB in place up until 2020 @haas_up_2020. This would technically be enough to run the simple tree search, but
-it still demonstrates that WASM-applications are not expected to use this much memory in most cases. To align more closely
-with user expectations, we instead want to use a method that gets by with much less memory.
+in the context of software running in the browser as WASM. We instead want to use a method that gets by with much less memory.
 
 The essence of our strategy is to still perform a tree search, specifically depth-first-search, but avoid storing a map
 of visited positions. Of course just running the DFS without a visit map leads to exponential runtime, since we're
@@ -205,6 +202,10 @@ positions, but we will never abandon a solvable path.
 Bloom filters provide us with a trade-off parameter that we can tune. If we make the bloom filter more accurate, we
 waste less time during tree search, but this increases the storage size of the bloom filter, meaning that we have to
 download and store more data to the users's device.
+
+To construct a bloom filter, we run a tree search backwards from the end position, which lets us enumerate all solvable
+positions. These are then added to the filter. This computation can be done once offline, so the runtime of this
+preprocessing step is not that relevant.
 
 == Rotations and Mirroring
 <sec:mirroring>
@@ -252,19 +253,31 @@ hole is converted to one bit, assembled row-wise. From this list we select the c
 
 == de Bruijn\'s $GF4$ Trick
 
-The algorithm described so far will, assuming that the bloom filter is not too small, terminate rather quickly in the average case. There are however starting locations where the search gets stuck in a cluster of adjacent false positives. In those cases, the algorithm has to explore all of them before being able to conclude that they are in fact false positives.
+The algorithm described so far will, assuming that the bloom filter is not too small, terminate rather quickly in the
+average case. There are however starting positions where the search gets stuck in a cluster of adjacent false positives.
+In those cases, the algorithm has to explore all of them before being able to conclude that they are in fact false positives.
 
-This is especially relevant if we want to provide a user interface where the player can interactively edit a starting location by adding and removing individual pegs, just like they might do on a real board. We want to show the user whether the current position is solvable, and update this information in real time.
+// todo: add some reference to the experiments section here for clusters and for "quickly in the average case"
 
-A significant optimisation would be possible by partitioning game positions into equivalence classes that are closed under moves. If we can then figure out that a given position is not in the same class as the end position, then we immediately know that the given position is unsolvable, since we can only ever reach positions that are in the same class as where we started.
+This is especially relevant if we want to provide a user interface where the player can interactively edit a starting
+position by adding and removing individual pegs, just like they might do on a real board. We want to show the user
+whether the current position is solvable, and update this information in real time.
 
-One possible mapping from game positions to equivalence classes was published by de Bruijn by making use of Galois fields @nicolaas_govert_de_bruijn_solitaire_1972, specifically $GF4$ (also denoted $bb(F)_4$). He defines two functions $A$ and $B$ that both map a position $P$ to $GF4$. Since $GF4$ has four elements, this means that the pair $(A(P), B(P))$ can take on $4 times 4 = 16$ values.
+A significant optimisation would be possible by partitioning game positions into equivalence classes that are closed
+under moves. If we can then figure out that a given position is not in the same class as the end position, then we
+immediately know that the given position is unsolvable, since we can only ever reach positions that are in the same
+class as where we started.
+
+One possible mapping from game positions to equivalence classes was published by de Bruijn by making use of Galois
+fields @nicolaas_govert_de_bruijn_solitaire_1972, specifically $GF4$ (also denoted $bb(F)_4$). He defines two functions
+$A$ and $B$ that both map a position $P$ to $GF4$. Since $GF4$ has four elements, this means that the pair $(A(P), B(P))$
+can take on $4 times 4 = 16$ values.
 
 $
 A(P) = sum_((k,l) in P) p^(k + l),
 $
 
-where we say that $(k,l) in P$ if $k$ and $l$ are natural numbers and represent the coordinates of a peg present in
+where we say that $(k,l) in P$ if $k$ and $l$ are natural numbers that represent the coordinates of a peg present in
 position $P$ such that the center hole has coordinates (0, 0).
 
 Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$, i.e., we use $p$ to denote one of the
@@ -283,7 +296,8 @@ We summarize the proof from de Bruijn's paper here in a slighly compressed form 
 ]<thm>
 
 #proof[\
-  Assume that the move happens in a direction where coordinates increase, such that the locations where pegs are removed contribute values $p^(i)$ and $p^(i+1)$, and the location where a peg is added contributes $p^(i+2)$.
+  Assume that the move happens in a direction where coordinates increase, such that the coordinates where pegs are removed
+  contribute values $p^(i)$ and $p^(i+1)$, and the coordinate where a peg is added contributes $p^(i+2)$.
 
   From the definition of #GF4 we can verify that
 
@@ -305,21 +319,34 @@ We summarize the proof from de Bruijn's paper here in a slighly compressed form 
   It remains to show that the same also holds when the move is taken in the direction of decreasing coordinates. Let the
   coordinates where pegs are removed still be $p^i$ and $p^(i+1)$, but now a peg is added at $p^(i-1)$ instead.
 
-  Because the multiplicative group of #GF4 has order 3, we know that $p^3 = 1$ and therefore $p^(i-1) = p^(i+2)$.
+  Because the multiplicative group of #GF4 has three elements, we know that $p^3 = 1$ and therefore $p^(i-1) = p^(i+2)$.
 ]<proof>
 
 The proof for $B$ follows the same procedure.
 
-Note that this trick should only be applied once per search, namely at the starting position of the search. If we find that the given starting position is in the same equivalence class as the end position, then we perform the normal search algorithm as described previously. It does not make sense to re-apply this check at every visited position in the search, since all the visited positions are reachable from the given starting position, and therefore fall into the same equivalence class.
+Note that this trick should only be applied once per search, namely at the starting position of the search. If we find
+that the given starting position is in the same equivalence class as the end position, then we perform the normal search
+algorithm as described previously. It does not make sense to re-apply this check at every visited position in the
+search, since all the visited positions are reachable from the given starting position, and therefore fall into the same
+equivalence class. In particular, this trick will never improve the performance of a search from the normal start
+position.
 
 = Parameter Selection and Evaluation
 
+TODO:
+
+- parameter k of bloom filters
+- compression of bloom filter
+- worst case analysis plot
+
 #figure(
-  image("img/k-hash-methods.png"),
-  scope: "parent",
-  placement: bottom,
+  image("img/round-vs-primes.png"),
+  // scope: "parent",
+  // placement: bottom,
   caption: [a plot],
 ) <fig:plot>
+
+TODO
 
 = Forcing Intermediate Positions
 
@@ -451,7 +478,7 @@ both transformations turn this into a change from one to two pegs.
 }
 
 @fig:commutative[Figure] shows the effect of applying both transformations, namely that
-we end up with the original move, as if we had not applyied no transformation at all.
+we end up with the original move, as if we had not applied any transformation at all.
 
 Given positions $P$ and $Q$ that are one single move apart, this means that the inverse position of $Q$
 can reach the inverse position of $P$ with that same move. We say that two moves are the same if
@@ -498,11 +525,23 @@ If $"solve"(inv(P), E)$ does not find a sequence, then we know that $P$ is not r
 
 // TODO: introduce notation for function to compute path from A to B. Notation for inverse (bar)
 
+= Overall Pseudocode
+
+
+
 = Related Work
+
+TODO
 
 integer programming @jefferson_modelling_2006 @goos_integer_2001.
 
 time-reversible game @engbers_reversible_2015.
+
+= Future Work
+
+TODO
+
+Reachable state space in time-reversible game on normal board?
 
 
 #bibliography("references.bib")
