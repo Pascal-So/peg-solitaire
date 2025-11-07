@@ -440,17 +440,6 @@
     kind: table
   ): set figure.caption(position: top)
 
-  // equations
-  set math.equation(numbering: "(1)")
-  show math.equation: it => {
-    if it.block and not it.has("label") [
-        #counter(math.equation).update(v => v - 1)
-        #math.equation(it.body, block: true, numbering: none)#label("")
-    ] else {
-      it
-    }  
-  }
-
   // references
   set ref(supplement: it => {
     if it.func() == figure and it.kind == image {

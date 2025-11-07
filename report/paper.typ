@@ -149,7 +149,7 @@ before the game. @fig:statespace shows an overview of the relations between thes
   ],
   placement: bottom,
   scope: "parent",
-  image("img/state-space.png")
+  image("img/state-space.pdf")
 ) <fig:statespace>
 
 One interesting observation is that during the beginning it's very hard to mess anything up, since almost all of
@@ -363,7 +363,7 @@ uncorrelated, the optimal $k$ for the lowest false positive rate can be computed
 filter and the total size of the input space @thomas_hurst_bloom_nodate.
 
 #figure(
-  image("img/k.png"),
+  image("img/k.pdf"),
   placement: bottom,
   caption: [
     Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
@@ -380,7 +380,7 @@ Note however, that a larger $k$ increases the number of bits that are set to 1 i
 affects the compression ratios achieved by Brotli and other methods.
 
 #figure(
-  image("img/k-vs-compression.png"),
+  image("img/k-vs-compression.pdf"),
   placement: bottom,
   caption: [
     Comparing false positive rates for compressed and uncompressed bloom filters with different values of $k$. While
@@ -397,7 +397,7 @@ TODO:
 - worst case analysis plot
 
 #figure(
-  image("img/round-vs-primes.png"),
+  image("img/round-vs-primes.pdf"),
   // scope: "parent",
   placement: bottom,
   caption: [a plot],
