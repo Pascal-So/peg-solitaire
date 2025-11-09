@@ -152,7 +152,7 @@ before the game. @fig:statespace shows an overview of the relations between thes
   image("img/state-space.pdf")
 ) <fig:statespace>
 
-One interesting observation is that during the beginning it's very hard to mess anything up, since almost all of
+One interesting observation is that during the beginning it's very hard to mess anything up, since almost all
 the positions that can be reached within the first five moves are solvable. During the later stages however, the player
 is almost guaranteed to fail if they just perform random moves.
 
@@ -186,9 +186,9 @@ we have an approximation of this set of solvable positions, rather than knowing 
 
 == Bloom Filters
 
-Bloom Filters are probabilistic datastructures that provide two operations: we can add an element to a set, and we can
+Bloom Filters are probabilistic data structures that provide two operations: we can add an element to a set, and we can
 ask whether a given element is present in the set @bloom_spacetime_1970. A bloom filter requires much less storage than
-simply storing all of the elements, but the downside is that there is a small chance of getting an incorrect answer when
+simply storing all the elements, but the downside is that there is a small chance of getting an incorrect answer when
 checking for presence.
 
 If an element is in the set, then a bloom filter will always correctly respond "Yes" when asking for that element. But
@@ -201,7 +201,7 @@ positions, but we will never abandon a solvable path.
 
 Bloom filters provide us with a trade-off parameter that we can tune. If we make the bloom filter more accurate, we
 waste less time during tree search, but this increases the storage size of the bloom filter, meaning that we have to
-download and store more data to the users's device.
+download and store more data to the user's device.
 
 To construct a bloom filter, we run a tree search backwards from the end position, which lets us enumerate all solvable
 positions. These are then added to the filter. This computation can be done once offline, so the runtime of this
@@ -263,7 +263,7 @@ This is especially relevant if we want to provide a user interface where the pla
 position by adding and removing individual pegs, just like they might do on a real board. We want to show the user
 whether the current position is solvable, and update this information in real time.
 
-A significant optimisation would be possible by partitioning game positions into equivalence classes that are closed
+A significant optimization would be possible by partitioning game positions into equivalence classes that are closed
 under moves. If we can then figure out that a given position is not in the same class as the end position, then we
 immediately know that the given position is unsolvable, since we can only ever reach positions that are in the same
 class as where we started.
@@ -278,7 +278,7 @@ A(P) = sum_((k,l) in P) p^(k + l),
 $
 
 where we say that $(k,l) in P$ if $k$ and $l$ are natural numbers that represent the coordinates of a peg present in
-position $P$ such that the center hole has coordinates (0, 0).
+position $P$ such that the centre hole has coordinates (0, 0).
 
 Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$, i.e., we use $p$ to denote one of the
 elements that are neither the additive nor multiplicative identity.
@@ -289,7 +289,7 @@ $
 B(P) = sum_((k,l) in P) p^(k - l)
 $
 
-We summarize the proof from de Bruijn's paper here in a slighly compressed form for the reader's convenience.
+We summarize the proof from de Bruijn's paper here in a slightly compressed form for the reader's convenience.
 
 #theorem([$A$ is preserved under moves])[\
   $P arrow.r Q arrow.r.double A(P) = A(Q)$
@@ -313,8 +313,8 @@ We summarize the proof from de Bruijn's paper here in a slighly compressed form 
   &= p^(i+2),
   $
 
-  which is the term that we add at the same time as removing the other two terms. Therefore the sum does not change after
-  the move and we get that $A(P) = A(Q)$.
+  which is the term that we add at the same time as removing the other two terms. Therefore, the sum does not change after
+  the move, and we get that $A(P) = A(Q)$.
 
   It remains to show that the same also holds when the move is taken in the direction of decreasing coordinates. Let the
   coordinates where pegs are removed still be $p^i$ and $p^(i+1)$, but now a peg is added at $p^(i-1)$ instead.
@@ -369,7 +369,7 @@ filter and the total size of the input space @thomas_hurst_bloom_nodate.
     Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
     filters, increasingly larger $k$ yield better false positive rates.
   ],
-) <fig:plot>
+) <fig:k>
 
 
 $
@@ -387,7 +387,7 @@ affects the compression ratios achieved by Brotli and other methods.
     $k = 3$ is optimal among all uncompressed filters of size 12 MB, we see that $k = 1$ yields a lower false positive
     rate at 12 MB if we allow for Brotli compression.
   ],
-) <fig:plot>
+) <fig:k_compression>
 
 
 TODO:
