@@ -166,7 +166,7 @@ impl Position {
             let mut bit_index;
             let start_y;
             let count;
-            if x >= 2 && x <= 4 {
+            if (2..=4).contains(&x) {
                 bit_index = 0 + (x - 2);
                 start_y = 0;
                 count = 7;
@@ -368,41 +368,61 @@ pub enum Direction {
     Backward,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum SolveResult {
     Solved(Vec<Jump>),
     Unsolvable,
     TimedOut,
 }
 
+/// Additional statistics about the solve process
+pub struct SolveInfo {
+    pub nr_steps: u32,
+    pub nr_attempts: u32,
+}
+
+/// Find a path from the given position to the default end position using DFS
+/// and a bloom filter.
+/// If the direction is set to backward, then we search a path to the start
+/// instead, i.e. solving the problem in reverse.
 pub fn solve_with_bloom_filter(
     mut pos: Position,
     filter: &BloomFilter,
     dir: Direction,
-) -> SolveResult {
+    seed: u64,
+) -> (SolveResult, SolveInfo) {
+    let mut solve_info = SolveInfo {
+        nr_steps: 0,
+        nr_attempts: 0,
+    };
     if !de_bruijn_solvable(pos) {
-        return SolveResult::Unsolvable;
+        return (SolveResult::Unsolvable, solve_info);
     }
 
-    const STEP_LIMIT: u32 = 120;
-    fn inner(
+    fn depth_first_search(
         pos: Position,
         filter: &BloomFilter,
         end: Position,
         nr_steps: &mut u32,
         jumps: &[Jump; 76],
+        step_limit: u32,
     ) -> SolveResult {
-        *nr_steps += 1;
-        if *nr_steps > STEP_LIMIT {
+        if *nr_steps > step_limit {
             return SolveResult::TimedOut;
         }
+        *nr_steps += 1;
 
         for &jump in jumps {
             if pos.can_jump(jump) {
                 let next = pos.apply_jump(jump);
+
+                // Check if we've reached the end position
                 if next == end {
                     return SolveResult::Solved(vec![jump]);
                 }
 
+                // If the next position only has a single peg left somewhere
+                // other than in the end position then we skip it.
                 if next.count() == 1 {
                     continue;
                 }
@@ -411,7 +431,7 @@ pub fn solve_with_bloom_filter(
                     continue;
                 }
 
-                match inner(next, filter, end, nr_steps, jumps) {
+                match depth_first_search(next, filter, end, nr_steps, jumps, step_limit) {
                     SolveResult::Solved(mut list) => {
                         list.push(jump);
                         return SolveResult::Solved(list);
@@ -426,11 +446,11 @@ pub fn solve_with_bloom_filter(
     }
 
     if !filter.query(pos.normalize()) {
-        return SolveResult::Unsolvable;
+        return (SolveResult::Unsolvable, solve_info);
     }
 
     let mut jumps = all_jumps();
-    let mut rng = Pcg64Mcg::seed_from_u64(0);
+    let mut rng = Pcg64Mcg::seed_from_u64(seed);
 
     if dir == Direction::Backward {
         pos = pos.inverse();
@@ -438,23 +458,31 @@ pub fn solve_with_bloom_filter(
 
     let end = Position::default_end();
     if pos == end {
-        return SolveResult::Solved(vec![]);
+        return (SolveResult::Solved(vec![]), solve_info);
     }
 
-    for _ in 0..200 {
-        match inner(pos, filter, end, &mut 0, &jumps) {
+    let mut step_limit = 50;
+    for _attempt in 0..100 {
+        let mut nr_steps = 0;
+        let result = depth_first_search(pos, filter, end, &mut nr_steps, &jumps, step_limit);
+        solve_info.nr_steps += nr_steps;
+        solve_info.nr_attempts += 1;
+        // allow every successive DFS attempt to explore a bit more of the tree
+        step_limit += 10;
+
+        match result {
             SolveResult::Solved(mut list) => {
                 list.reverse();
-                return SolveResult::Solved(list);
+                return (SolveResult::Solved(list), solve_info);
             }
-            SolveResult::Unsolvable => return SolveResult::Unsolvable,
+            SolveResult::Unsolvable => return (SolveResult::Unsolvable, solve_info),
             SolveResult::TimedOut => {}
         }
 
         jumps.shuffle(&mut rng);
     }
 
-    SolveResult::TimedOut
+    (SolveResult::TimedOut, solve_info)
 }
 
 pub fn all_jumps() -> [Jump; 76] {
@@ -652,7 +680,8 @@ mod tests {
             "    ...    ",
         ]);
 
-        let SolveResult::Solved(jumps) = solve_with_bloom_filter(pos, &filter, Direction::Forward)
+        let SolveResult::Solved(jumps) =
+            solve_with_bloom_filter(pos, &filter, Direction::Forward, 0).0
         else {
             panic!("should be solvable");
         };

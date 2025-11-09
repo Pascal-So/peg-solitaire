@@ -1,23 +1,17 @@
 #![allow(dead_code)]
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Range,
-    path::PathBuf,
-    time::Instant,
-};
+use std::{collections::HashMap, ops::Range, path::PathBuf, time::Instant};
 
 use primal::Primes;
-use rand::{Rng, SeedableRng, seq::SliceRandom};
+use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
-use common::{BloomFilter, Jump, Position, all_jumps, debruijn::de_bruijn_solvable};
-use precompute::{
-    VisitMap,
-    positions::{get_difficult_positions, get_solvable_positions},
+use common::{
+    BloomFilter, Jump, Position, all_jumps, debruijn::de_bruijn_solvable, solve_with_bloom_filter,
 };
+use precompute::VisitMap;
 
 fn build_bloom_filter(size: u32, solvability_map: &VisitMap, k: u32) -> BloomFilter {
     let start = Instant::now();
@@ -272,7 +266,9 @@ fn build_one_past_solvable_map(solvability_map: &VisitMap) -> VisitMap {
 
 fn prime_candidates(range: Range<u32>) -> Vec<u32> {
     let mut previous_value = 0;
-    let min_factor = 1.1939; // factor chosen such that we get 26 candidates
+    // factor chosen such that we get a similar density in the prime number
+    // candidates and in the round numbers.
+    let min_factor = 1.1939;
 
     let mut candidates = vec![];
 
@@ -294,95 +290,32 @@ fn prime_candidates(range: Range<u32>) -> Vec<u32> {
 #[derive(Serialize)]
 struct SolverStats {
     max_steps: u64,
-    average_steps: f64,
+    total_steps: u64,
+    nr_samples: u64,
+    nr_timeouts: u64,
 }
 
 fn evaluate_solver_stats(filter: &BloomFilter, start_positions: &[Position]) -> SolverStats {
+    let start_time = Instant::now();
     let mut total_steps = 0;
     let mut max_steps = 0;
-
-    #[derive(Eq, PartialEq, Debug)]
-    enum Result {
-        Solved,
-        NotSolved,
-        TimedOut,
-    }
-
-    fn step_inner_preshuffled(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        jumps: &[Jump; 76],
-        limit: u64,
-    ) -> Result {
-        if *nr_steps >= limit {
-            return Result::TimedOut;
-        }
-        *nr_steps += 1;
-
-        for &jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-                if next == end {
-                    return Result::Solved;
-                }
-                if filter.query(next.normalize()) {
-                    match step_inner_preshuffled(filter, next, nr_steps, end, jumps, limit) {
-                        Result::Solved => return Result::Solved,
-                        Result::NotSolved => {}
-                        Result::TimedOut => return Result::TimedOut,
-                    }
-                }
-            }
-        }
-
-        Result::NotSolved
-    }
-
-    let start_time = Instant::now();
-    let nr_samples = (10000 / start_positions.len() as u64).max(100);
+    let mut nr_timeouts = 0;
+    let nr_samples = 1.max(10000 / start_positions.len() as u64);
     let mut actual_nr_samples = 0;
     for start_pos in start_positions {
         for i in 0..nr_samples {
-            let mut rng = Pcg64Mcg::seed_from_u64(i);
+            let (result, stats) =
+                solve_with_bloom_filter(*start_pos, filter, common::Direction::Forward, i);
 
-            let mut nr_steps = 0;
-            let end = Position::default_end();
-
-            let mut jumps = all_jumps();
-            jumps.shuffle(&mut rng);
-
-            let nr_attempts = 100;
-            let limit = 50;
-            for attempt in 0..nr_attempts {
-                let last_attempt = attempt + 1 == nr_attempts;
-
-                jumps.shuffle(&mut rng);
-
-                nr_steps = 0;
-                let solved =
-                    step_inner_preshuffled(filter, *start_pos, &mut nr_steps, end, &jumps, limit);
-                match solved {
-                    Result::Solved | Result::NotSolved => {
-                        nr_steps += attempt * limit;
-                        break;
-                    }
-                    Result::TimedOut => {
-                        if last_attempt {
-                            nr_steps += attempt * limit;
-                            break;
-                        }
-                    }
-                }
+            if result == common::SolveResult::TimedOut {
+                nr_timeouts += 1;
             }
-
-            total_steps += nr_steps;
-            max_steps = max_steps.max(nr_steps);
+            let steps = stats.nr_steps as u64;
+            max_steps = max_steps.max(steps);
+            total_steps += steps;
             actual_nr_samples += 1;
         }
     }
-
     println!(
         "evaluated solver steps {actual_nr_samples} times in {}s",
         start_time.elapsed().as_secs_f32()
@@ -390,10 +323,14 @@ fn evaluate_solver_stats(filter: &BloomFilter, start_positions: &[Position]) -> 
 
     SolverStats {
         max_steps,
-        average_steps: total_steps as f64 / actual_nr_samples as f64,
+        total_steps,
+        nr_samples: actual_nr_samples,
+        nr_timeouts,
     }
 }
 
+/// Generate a list of numbers where the prime factorization moostly consists
+/// of factors 2.
 fn round_candidates(range: Range<u32>) -> Vec<u32> {
     let mut candidates = vec![];
 
@@ -423,16 +360,17 @@ fn round_minus_one_candidates(range: Range<u32>) -> Vec<u32> {
     candidates
 }
 
-fn get_candidates_groups() -> [(Vec<u32>, String); 3] {
-    // 512KB to 42MB
-    let range = 512 * 1024 * 8..42 * 1024 * 1024 * 8;
+fn get_candidates_groups() -> [(Vec<u32>, String); 2] {
+    let kb = 1024 * 8;
+    let mb = 1024 * kb;
+    let range = 512 * kb..42 * mb;
     [
         (prime_candidates(range.clone()), "prime".to_string()),
         (round_candidates(range.clone()), "round".to_string()),
-        (
-            round_minus_one_candidates(range.clone()),
-            "round_minus_one".to_string(),
-        ),
+        // (
+        //     round_minus_one_candidates(range.clone()),
+        //     "round_minus_one".to_string(),
+        // ),
     ]
 }
 
@@ -515,127 +453,6 @@ fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
         .unwrap();
 }
 
-fn evaluate_difficult_positions(filter: &BloomFilter) {
-    let mut jumps = all_jumps();
-    let mut rng = Pcg64Mcg::seed_from_u64(0);
-
-    let mut start_positions = get_difficult_positions();
-    start_positions.push(Position::default_start());
-    let end_pos = Position::default_end();
-
-    #[derive(Eq, PartialEq, Debug)]
-    enum Result {
-        TimeOut,
-        Solved,
-        NotSolved,
-    }
-
-    fn step(
-        filter: &BloomFilter,
-        pos: Position,
-        nr_steps: &mut u64,
-        end: Position,
-        jumps: &[Jump; 76],
-        cache: &mut HashSet<Position>,
-        limit: u64,
-    ) -> Result {
-        *nr_steps += 1;
-
-        if *nr_steps > limit {
-            return Result::TimeOut;
-        }
-
-        for &jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
-
-                if next == end {
-                    return Result::Solved;
-                }
-
-                if !filter.query(next.normalize()) {
-                    continue;
-                }
-
-                let result = step(filter, next, nr_steps, end, jumps, cache, limit);
-                match result {
-                    Result::TimeOut => return Result::TimeOut,
-                    Result::Solved => return Result::Solved,
-                    Result::NotSolved => {}
-                }
-            }
-        }
-
-        // if (pos.0 + *nr_steps * 11) % 17 < 2 {
-        // cache.insert(pos.normalize());
-        // }
-
-        Result::NotSolved
-    }
-
-    let limit = 2000;
-    let limit_per_attempt = 200;
-
-    for start_pos in start_positions.clone() {
-        if !de_bruijn_solvable(start_pos) {
-            continue;
-        }
-
-        start_pos.print();
-
-        let mut nr_solved = 0;
-        let mut nr_unsolved = 0;
-        let mut nr_timed_out = 0;
-
-        for _ in 0..1000 {
-            jumps.shuffle(&mut rng);
-            let mut nr_steps;
-
-            let mut attempt = 0;
-            loop {
-                attempt += 1;
-
-                jumps.shuffle(&mut rng);
-
-                nr_steps = 0;
-
-                let mut cache = HashSet::new();
-                let solved = step(
-                    filter,
-                    start_pos,
-                    &mut nr_steps,
-                    end_pos,
-                    &jumps,
-                    &mut cache,
-                    limit_per_attempt,
-                );
-
-                match solved {
-                    Result::Solved => {
-                        nr_solved += 1;
-                        break;
-                    }
-                    Result::NotSolved => {
-                        nr_unsolved += 1;
-                        break;
-                    }
-                    Result::TimeOut => {}
-                }
-
-                if attempt * limit_per_attempt > limit {
-                    nr_timed_out += 1;
-                    break;
-                }
-            }
-        }
-
-        println!(
-            "                  y: {nr_solved:5}, n: {nr_unsolved:5}, ?: {nr_timed_out:5}. positive children: {:?}",
-            count_positive_children(filter, start_pos)
-        );
-    }
-}
-
 fn count_positive_children(filter: &BloomFilter, pos: Position) -> (u64, u64) {
     let mut positives = 0;
     let mut total = 0;
@@ -653,8 +470,8 @@ fn count_positive_children(filter: &BloomFilter, pos: Position) -> (u64, u64) {
 }
 
 /// Draw a random sample of solvable positions using reservoir sampling.
-fn get_random_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
-    let nr_positions = 128;
+fn get_random_solvable_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
+    let nr_positions = 1 << 16;
     let mut start_positions = Vec::with_capacity(nr_positions);
     let mut rng = Pcg64Mcg::seed_from_u64(123);
 
@@ -663,7 +480,41 @@ fn get_random_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
         if b {
             let pos = Position(pos as u64);
 
-            if pos.count() < 27 {
+            if pos.count() < 26 {
+                continue;
+            }
+
+            if start_positions.len() < nr_positions {
+                start_positions.push(pos);
+            } else {
+                let j = rng.random_range(..i);
+                if j < nr_positions {
+                    start_positions[j] = pos;
+                }
+            }
+            i += 1;
+        }
+    }
+
+    start_positions
+}
+
+/// Draw a random sample of positions that are not solvable, but are deBruijn
+/// solvable, using reservoir sampling.
+fn get_random_unsolvable_start_positions(solvability_map: &VisitMap) -> Vec<Position> {
+    let nr_positions = 1 << 16;
+    let mut start_positions = Vec::with_capacity(nr_positions);
+    let mut rng = Pcg64Mcg::seed_from_u64(123);
+
+    let mut i: usize = 1;
+    for (pos, b) in solvability_map.iter().enumerate() {
+        if !b {
+            let pos = Position(pos as u64);
+            if pos.count() < 23 {
+                continue;
+            }
+
+            if !de_bruijn_solvable(pos) {
                 continue;
             }
 
@@ -691,6 +542,8 @@ fn analyze_state_space() {
         solvable_norm_at: Vec<i32>,
         via_solvable_at: Vec<i32>,
         via_solvable_norm_at: Vec<i32>,
+        de_bruijn_solvable_at: Vec<i32>,
+        de_bruijn_solvable_norm_at: Vec<i32>,
     }
 
     let mut info = Info {
@@ -698,15 +551,18 @@ fn analyze_state_space() {
         solvable_norm_at: vec![0; 34],
         via_solvable_at: vec![0; 34],
         via_solvable_norm_at: vec![0; 34],
+        de_bruijn_solvable_at: vec![0; 34],
+        de_bruijn_solvable_norm_at: vec![0; 34],
     };
 
     for (pos, b) in solvability_map.iter().enumerate() {
-        if b {
-            let pos = Position(pos as u64);
-            let is_normalized = pos == pos.normalize();
-            let is_via_solvable = solvability_map.is_visited(pos.inverse());
+        let pos = Position(pos as u64);
+        let is_normalized = pos == pos.normalize();
+        let is_de_bruijn_solvable = de_bruijn_solvable(pos);
+        let count = pos.count() as usize;
 
-            let count = pos.count() as usize;
+        if b {
+            let is_via_solvable = solvability_map.is_visited(pos.inverse());
 
             info.solvable_at[count] += 1;
 
@@ -719,6 +575,13 @@ fn analyze_state_space() {
             if is_via_solvable && is_normalized {
                 info.via_solvable_norm_at[count] += 1;
             }
+        }
+
+        if is_de_bruijn_solvable {
+            info.de_bruijn_solvable_at[count] += 1;
+        }
+        if is_de_bruijn_solvable && is_normalized {
+            info.de_bruijn_solvable_norm_at[count] += 1;
         }
     }
 
@@ -740,21 +603,38 @@ fn main() {
 
     // return;
 
+    let solvability_map = build_solvability_map();
     let mut solver_stats = vec![];
 
-    for (candidate_sizes, group) in get_candidates_groups() {
-        if group == "round_minus_one" {
-            continue;
-        }
+    let solvable_positions = get_random_solvable_start_positions(&solvability_map);
+    let unsolvable_positions = get_random_unsolvable_start_positions(&solvability_map);
 
+    for (candidate_sizes, _group) in get_candidates_groups() {
         let results = candidate_sizes.par_iter().map(|&size| {
             let filter =
                 BloomFilter::load_from_file(format!("filters/modulo/filter_{size:0>9}_1_norm.bin"));
             let stats_default_start = evaluate_solver_stats(&filter, &[Position::default_start()]);
-            (stats_default_start, size)
+            let stats_solvable = evaluate_solver_stats(&filter, &solvable_positions);
+            let stats_unsolvable = evaluate_solver_stats(&filter, &unsolvable_positions);
+            (stats_default_start, stats_solvable, stats_unsolvable, size)
         });
 
-        solver_stats.append(&mut results.collect());
+        // solver_stats.append(&mut results.collect());
+        let results: Vec<_> = results.collect();
+        for r in results {
+            solver_stats.push(serde_json::json!({
+                "size": r.3,
+                "default_max": r.0.max_steps,
+                "default_avg": r.0.total_steps as f64 / r.0.nr_samples as f64,
+                "default_completed": 1.0 - (r.0.nr_timeouts as f64 / r.0.nr_samples as f64),
+                "solvable_max": r.1.max_steps,
+                "solvable_avg": r.1.total_steps as f64 / r.1.nr_samples as f64,
+                "solvable_completed": 1.0 - (r.1.nr_timeouts as f64 / r.1.nr_samples as f64),
+                "unsolvable_max": r.2.max_steps,
+                "unsolvable_avg": r.2.total_steps as f64 / r.2.nr_samples as f64,
+                "unsolvable_completed": 1.0 - (r.2.nr_timeouts as f64 / r.2.nr_samples as f64),
+            }));
+        }
     }
 
     serde_json::to_writer_pretty(

@@ -167,7 +167,7 @@ impl GameState {
             ] {
                 if path.is_none() {
                     log::info!("running solver for direction {dir:?}");
-                    match solve_with_bloom_filter(pos, bloom_filter, dir) {
+                    match solve_with_bloom_filter(pos, bloom_filter, dir, 0).0 {
                         common::SolveResult::Solved(jumps) => {
                             let mut moves = convert_jump_sequence_to_moves(
                                 self.arrangement.clone(),
