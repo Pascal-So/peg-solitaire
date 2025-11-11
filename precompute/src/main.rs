@@ -15,7 +15,7 @@ use precompute::VisitMap;
 
 fn build_bloom_filter(size: u32, solvability_map: &VisitMap, k: u32) -> BloomFilter {
     let start = Instant::now();
-    let filename = PathBuf::from(format!("filters/filter_{size:0>9}_{k}_norm.bin"));
+    let filename = PathBuf::from(format!("filters/modulo/filter_{size:0>9}_{k}_norm.bin"));
     if filename.is_file() {
         let filter = BloomFilter::load_from_file(filename);
         println!("loaded filter {size} in {}s", start.elapsed().as_secs_f32());
@@ -363,7 +363,7 @@ fn round_minus_one_candidates(range: Range<u32>) -> Vec<u32> {
 fn get_candidates_groups() -> [(Vec<u32>, String); 2] {
     let kb = 1024 * 8;
     let mb = 1024 * kb;
-    let range = 512 * kb..42 * mb;
+    let range = 512 * kb..70 * mb;
     [
         (prime_candidates(range.clone()), "prime".to_string()),
         (round_candidates(range.clone()), "round".to_string()),
@@ -409,8 +409,11 @@ fn build_data_and_perform_false_positive_evaluation() {
         .collect();
 
     println!("evaluated stats in {}s", start_time.elapsed().as_secs_f32());
-    serde_json::to_writer_pretty(std::fs::File::create("data-MBrange.json").unwrap(), &stats)
-        .unwrap();
+    serde_json::to_writer_pretty(
+        std::fs::File::create("size-comparison.json").unwrap(),
+        &stats,
+    )
+    .unwrap();
 }
 
 fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
@@ -593,6 +596,9 @@ fn analyze_state_space() {
 }
 
 fn main() {
+    // build_data_and_perform_false_positive_evaluation();
+    // return;
+
     // analyze_state_space();
     // return;
     // let prime_filter = BloomFilter::load_from_file("filters/filter_173378771_norm.bin");
@@ -619,7 +625,6 @@ fn main() {
             (stats_default_start, stats_solvable, stats_unsolvable, size)
         });
 
-        // solver_stats.append(&mut results.collect());
         let results: Vec<_> = results.collect();
         for r in results {
             solver_stats.push(serde_json::json!({

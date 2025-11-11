@@ -318,7 +318,7 @@ impl BloomFilter {
     }
 }
 
-const BYTES_LIMIT_BLOOM_FILTER: usize = 50 * 1024 * 1024;
+const BYTES_LIMIT_BLOOM_FILTER: usize = 100 * 1024 * 1024;
 fn bincode_config() -> config::Configuration<
     config::LittleEndian,
     config::Fixint,
@@ -382,7 +382,7 @@ pub struct SolveInfo {
 }
 
 /// Find a path from the given position to the default end position using DFS
-/// and a bloom filter.
+/// based on a bloom filter.
 /// If the direction is set to backward, then we search a path to the start
 /// instead, i.e. solving the problem in reverse.
 pub fn solve_with_bloom_filter(
@@ -462,13 +462,17 @@ pub fn solve_with_bloom_filter(
     }
 
     let mut step_limit = 50;
-    for _attempt in 0..100 {
+    let nr_attempts = 100;
+    for attempt in 0..nr_attempts {
+        let last_attempt = attempt + 1 == nr_attempts;
+        if last_attempt {
+            step_limit = 10000;
+        }
+
         let mut nr_steps = 0;
         let result = depth_first_search(pos, filter, end, &mut nr_steps, &jumps, step_limit);
         solve_info.nr_steps += nr_steps;
         solve_info.nr_attempts += 1;
-        // allow every successive DFS attempt to explore a bit more of the tree
-        step_limit += 10;
 
         match result {
             SolveResult::Solved(mut list) => {

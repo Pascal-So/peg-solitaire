@@ -466,5 +466,35 @@
     "size_category": "round_minus_one",
     "false_positives": 623341788,
     "false_positives_in_one_past": 9630440
+  },
+  {
+    "size": 420567593,
+    "size_category": "prime",
+    "false_positives": 371542973,
+    "false_positives_in_one_past": 9174138
+  },
+  {
+    "size": 502115651,
+    "size_category": "prime",
+    "false_positives": 303491048,
+    "false_positives_in_one_past": 7285510
+  },
+  {
+    "size": 402653184,
+    "size_category": "round",
+    "false_positives": 558625538,
+    "false_positives_in_one_past": 8517300
+  },
+  {
+    "size": 469762048,
+    "size_category": "round",
+    "false_positives": 490012818,
+    "false_positives_in_one_past": 14049262
+  },
+  {
+    "size": 536870912,
+    "size_category": "round",
+    "false_positives": 469737219,
+    "false_positives_in_one_past": 225896
   }
 ]
