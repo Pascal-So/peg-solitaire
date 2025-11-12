@@ -367,7 +367,7 @@ filter and the total size of the input space @thomas_hurst_bloom_nodate.
   placement: bottom,
   caption: [
     Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
-    filters, increasingly larger $k$ yield better false positive rates.
+    filters, increasingly larger $k$ yield lower false positive rates.
   ],
 ) <fig:k>
 
@@ -377,11 +377,12 @@ k = "round"(m/n log(2))
 $
 
 Note however, that a larger $k$ increases the number of bits that are set to 1 in the bloom filter. This negatively
-affects the compression ratios achieved by Brotli and other methods.
+affects the compression ratios achieved by Brotli and other methods. It turns out that the better compression on $k = 1$
+outperforms the better false positive rates on $k > 1$, as can be seen in @fig:k_compression.
 
 #figure(
   image("img/k-vs-compression.pdf"),
-  placement: bottom,
+  placement: top,
   caption: [
     Comparing false positive rates for compressed and uncompressed bloom filters with different values of $k$. While
     $k = 3$ is optimal among all uncompressed filters of size 12 MB, we see that $k = 1$ yields a lower false positive
@@ -389,19 +390,41 @@ affects the compression ratios achieved by Brotli and other methods.
   ],
 ) <fig:k_compression>
 
+== Hashing Method & Filter Size
 
-TODO:
+Sticking with $k = 1$ turns out make a much simpler hashing method possible. Assuming our bloom filter contains $m$ bits,
+we need to design a hash function that takes a board position and maps it to a bit index in the range $[0, m)$. A simple
+way to do this is to interpret the position as a 33-bit number by interpreting every hole as a 1 if its occupied
+and 0 otherwise, and then assembling all the holes into a binary number. From this number we take the remainder after
+division by $m$, which gives us a bit index in the desired range. And as long as $m$ is much smaller than $2^(33)$ we
+end up with a distribution that is close enough to uniform for our purposes.
 
-- parameter k of bloom filters
-- compression of bloom filter
-- worst case analysis plot
+Now we are left with the task of selecting a value for $m$. We consider two candidate groups:
+
+- Primes, which intuitively should minimize any hash collisions between similar positions.
+- "Round numbers", numbers whose prime factorizations mostly or entirely consist of factors 2. We
+  expect them to behave as the conceptual opposite of the prime numbers, this should thus show us if using primes even
+  makes a difference.
 
 #figure(
-  image("img/round-vs-primes.pdf"),
-  // scope: "parent",
+  image("img/round-vs-primes-fpr.pdf"),
   placement: bottom,
-  caption: [a plot],
-) <fig:plot>
+  caption: [
+    Comparing the false positive rates between bloom filters that hash by taking the remainder after division by prime
+    numbers vs. numbers that are divisible by large powers of two. The latter hash method yields bloom filters that do
+    not follow the expected theoretical false positive rates for our dataset.
+  ],
+) <fig:round_vs_primes_fpr>
+
+#figure(
+  image("img/round-vs-primes-compression.pdf"),
+  placement: bottom,
+  caption: [
+    Comparing compression efficiencies with Brotli between different bloom filters. The point where the primes curve
+    reaches 1:1 is where 50% of the bits in the bloom filter are set.
+  ],
+) <fig:round_vs_primes_compression>
+
 
 TODO
 

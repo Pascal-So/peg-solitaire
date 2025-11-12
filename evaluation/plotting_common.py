@@ -33,6 +33,6 @@ def bytes_to_human_readable(x, pos):
     if x < 1024:
         return "{:.0f}B".format(x)
     elif x < 1024**2:
-        return "{:.0f}KB".format(x / 1024)
+        return "{:.0f}KiB".format(x / 1024)
     else:
-        return "{:.0f}MB".format(x / 1024**2)
+        return "{:.0f}MiB".format(x / 1024**2)
