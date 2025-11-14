@@ -23,6 +23,7 @@
   Source code available at
   #underline([https://github.com/Pascal-So/peg-solitaire]).
 ]))
+#counter(footnote).update(0)
 
 #include "section_intro.typ"
 #include "section_solver.typ"

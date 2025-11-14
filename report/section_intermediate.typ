@@ -47,11 +47,12 @@ unchanged if all particles in the universe were to be replaced with their antipa
 universe was mirrored (parity transformation) and time was reversed @sozzi_parity_2007. Note that all three
 transformations must be applied together, the symmetry does not hold for a subset of them.
 
-By gratuitous abuse of terminology, we now apply this same concept to Peg Solitaire.
+By gratuitous abuse of terminology, we now apply this same concept of discrete symmetries to Peg Solitaire.
 
 === Parity Transformation
 If we record a game and mirror one coordinate, the resulting recording still behaves exactly like a normal game of Peg
 Solitaire. This is exactly the property that we used in the #link(<sec:mirroring>)[section on the mirroring optimization].
+#footnote([Rotation is another discrete symmetry in peg solitaire, whereas in the real universe it is continuous.])
 We therefore say that P symmetry holds in Peg Solitaire.
 
 === Time Reversal

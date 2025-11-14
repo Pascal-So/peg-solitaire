@@ -133,7 +133,7 @@ a long time for the result, i.e. we're trying to minimize the worst-case of the 
 is to minimize the download size, for which we consider only the Brotli-compressed version.
 
 We evaluate the bloom filters on a dataset of 65,536 solvable and 65,536 unsolvable (but still de-Bruijn-solvable)
-positions. Solvers are timed out after 15,050 steps (see #link(<sec:pseudocode>)[pseudocode section] for details).
+positions. Solvers are timed out after about 15,000 steps (see #link(<sec:pseudocode>)[pseudocode section] for details).
 The results for the two optimal candidates are listed in @tbl:stats[Table].
 
 Using prime numbers is optimal for a low worst-case step count, whereas with round numbers we can get a much lower
@@ -178,7 +178,7 @@ download size, at the cost of some unsolvable positions where the solver times o
           [Completed],
         ),
         table.hline(stroke: tablestroke),
-        [#shortline(rgb(247,113,137)) Round], [268,435,456], [32.00 MiB], strong[2.74 MiB], [31.06], [1,658], [100%], [410.72], [15,050], [99.93%],
+        [#shortline(rgb(247,113,137)) Round], [268,435,456], [32.00 MiB], strong[2.74 MiB], [31.06], [1,658], [100%], [410.72], [timeout], [99.93%],
         [#shortline(rgb(54,173,164)) Prime], [502,115,651], [59.86 MiB], [8.15 MiB], [31.50], [194], [100%], [6.68], [9,149], strong[100%],
       )
     ) <tbl:stats>
