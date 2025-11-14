@@ -20,14 +20,12 @@
   inset: (top: 0em, left: thm-padding, right: thm-padding),
 )
 
-
 #show: jacow.with(
   title: [Precomputing Peg Solitaire],
   authors: (
     (name: "Pascal Sommer"),
   ),
   paper-size: "a4",
-  // funding: "Work supported by ...",
   abstract: [
     Finding a sequence of moves to solve a Peg Solitaire game is trivial if you have 1GiB of RAM to spare. This might however
     not be the case on a mobile web browser. Therefore, we optimize a WASM-compatible solver not just
@@ -41,6 +39,12 @@
   date: [#datetime.today().display("[month repr:long] [year]")],
 )
 
+#place(footnote(numbering: it => "", [
+  Source code available at
+  #underline([https://github.com/Pascal-So/peg-solitaire]).
+]))
+
+#let shortline(col) = [#box(rect(width: 8pt, height: 1.7pt, fill: col), baseline: -2pt)#sym.space.nobreak]
 
 = Introduction
 
@@ -79,7 +83,8 @@ start position to the end position will always consist of exactly 31 moves. Note
 sequences.
 
 When playing without any clear strategy, the player will often get stuck in a dead end where no more moves are available,
-for example when the remaining pegs are spread out across the board such that no two of them are directly adjacent anymore.
+for example when the remaining pegs are spread out across the board such that no two of them are directly adjacent any
+more.
 
 #figure(
   placement: top,
@@ -133,24 +138,23 @@ A board has 33 holes which all can either be occupied or empty, which means that
 On modern hardware, it's easily feasible to simply enumerate the entire state space so that we can accumulate whatever
 statistics we are interested in.
 
-It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
-of those unsolvable positions are not reachable from the start position. Similarly, there are some positions that cannot be
-reached from the start, but that could still be solved if we were to manually set up the board to one of these positions
-before the game. @fig:statespace shows an overview of the relations between these sets.
-
 #figure(
   caption: [
-    #let r(col) = [#box(rect(width: 8pt, height: 1.7pt, fill: col), baseline: -2pt)#sym.space.nobreak]
     Overview of the state space. We compare four different sets:
-    #r(rgb(247,113,137))Solvable, the set of positions that can reach the end,
-    #r(rgb(80,177,49))Reachable, the positions that can be reached from the start,
-    #r(rgb(54,173,164))the intersection of those two sets,
-    #r(rgb("#666"))the set of all possible positions, regardless of whether they can actually be reached during normal play.
+    #shortline(rgb(247,113,137))Solvable, the set of positions that can reach the end,
+    #shortline(rgb(80,177,49))Reachable, the positions that can be reached from the start,
+    #shortline(rgb(54,173,164))the intersection of those two sets,
+    #shortline(rgb("#666"))the set of all possible positions, regardless of whether they can actually be reached during normal play.
   ],
   placement: bottom,
   scope: "parent",
   image("img/state-space.pdf")
 ) <fig:statespace>
+
+It turns out that only around 2% of all positions are solvable, i.e., have a path to the end position. However, the majority
+of those unsolvable positions are not reachable from the start position. Similarly, there are some positions that cannot be
+reached from the start, but that could still be solved if we were to manually set up the board to one of these positions
+before the game. @fig:statespace shows an overview of the relations between these sets.
 
 One interesting observation is that during the beginning it's very hard to mess anything up, since almost all
 the positions that can be reached within the first five moves are solvable. During the later stages however, the player
@@ -181,7 +185,7 @@ positions are solvable. If the algorithm has a fast method to look up whether th
 solvable, then we can avoid visiting unsolvable positions in the first place.
 
 Of course 2% in this context is still a large number, in total there are 187,636,299 solvable positions, so we can't
-store them all on the client. To achieve the speedup by not re-visiting lots of unsolvable nodes, it is sufficient if
+store them all on the client. To achieve a speed-up by not re-visiting lots of unsolvable nodes, it is sufficient if
 we have an approximation of this set of solvable positions, rather than knowing it exactly.
 
 == Bloom Filters
@@ -256,8 +260,6 @@ hole is converted to one bit, assembled row-wise. From this list we select the c
 The algorithm described so far will, assuming that the bloom filter is not too small, terminate rather quickly in the
 average case. There are however starting positions where the search gets stuck in a cluster of adjacent false positives.
 In those cases, the algorithm has to explore all of them before being able to conclude that they are in fact false positives.
-
-// todo: add some reference to the experiments section here for clusters and for "quickly in the average case"
 
 This is especially relevant if we want to provide a user interface where the player can interactively edit a starting
 position by adding and removing individual pegs, just like they might do on a real board. We want to show the user
@@ -362,14 +364,36 @@ Bloom Filters compute $k$ different hashes of the given input @bloom_spacetime_1
 uncorrelated, the optimal $k$ for the lowest false positive rate can be computed given the number of elements in the
 filter and the total size of the input space @thomas_hurst_bloom_nodate.
 
-#figure(
-  image("img/k.pdf"),
-  placement: bottom,
-  caption: [
-    Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
-    filters, increasingly larger $k$ yield lower false positive rates.
-  ],
-) <fig:k>
+#place(
+  bottom,
+  scope: "parent",
+  float: true, 
+  grid(
+    columns: 2,
+    align: top,
+    gutter: 5mm,
+    [
+      #figure(
+        image("img/k.pdf"),
+        caption: [
+          Comparing false positive rates for different values of $k$. For smaller filters, $k = 1$ is optimal, but on larger
+          filters, increasingly larger $k$ yield lower false positive rates. The measured results for our data align closely
+          with the expected theoretical values.
+        ],
+      ) <fig:k>
+    ],
+    [
+      #figure(
+        image("img/k-vs-compression.pdf"),
+        caption: [
+          Comparing false positive rates for compressed and uncompressed bloom filters with different values of $k$. While
+          $k = 3$ is optimal among all uncompressed filters of size 12 MB, we see that $k = 1$ yields a lower false positive
+          rate at 12 MB if we allow for Brotli compression.
+        ],
+      ) <fig:k_compression>
+    ]
+  )
+)
 
 
 $
@@ -377,18 +401,8 @@ k = "round"(m/n log(2))
 $
 
 Note however, that a larger $k$ increases the number of bits that are set to 1 in the bloom filter. This negatively
-affects the compression ratios achieved by Brotli and other methods. It turns out that the better compression on $k = 1$
-outperforms the better false positive rates on $k > 1$, as can be seen in @fig:k_compression.
-
-#figure(
-  image("img/k-vs-compression.pdf"),
-  placement: top,
-  caption: [
-    Comparing false positive rates for compressed and uncompressed bloom filters with different values of $k$. While
-    $k = 3$ is optimal among all uncompressed filters of size 12 MB, we see that $k = 1$ yields a lower false positive
-    rate at 12 MB if we allow for Brotli compression.
-  ],
-) <fig:k_compression>
+affects the compression ratios achieved by Brotli and other methods. It turns out that across all size ranges, the better
+compression on $k = 1$ outperforms the better false positive rates on $k > 1$, as can be seen in @fig:k_compression.
 
 == Hashing Method & Filter Size
 
@@ -401,32 +415,122 @@ end up with a distribution that is close enough to uniform for our purposes.
 
 Now we are left with the task of selecting a value for $m$. We consider two candidate groups:
 
+#let rn = ["Round Numbers"]
+
 - Primes, which intuitively should minimize any hash collisions between similar positions.
-- "Round numbers", numbers whose prime factorizations mostly or entirely consist of factors 2. We
-  expect them to behave as the conceptual opposite of the prime numbers, this should thus show us if using primes even
-  makes a difference.
+- #rn, numbers whose prime factorizations mostly or entirely consist of factors 2. We
+  expect them to behave as the conceptual opposite of the prime numbers, thus demonstrating the relevance of considering
+  primes in the first place.
 
-#figure(
-  image("img/round-vs-primes-fpr.pdf"),
-  placement: bottom,
-  caption: [
-    Comparing the false positive rates between bloom filters that hash by taking the remainder after division by prime
-    numbers vs. numbers that are divisible by large powers of two. The latter hash method yields bloom filters that do
-    not follow the expected theoretical false positive rates for our dataset.
-  ],
-) <fig:round_vs_primes_fpr>
+We observe a large difference between these two candidate groups in the measured false positive rate
+(@fig:round_vs_primes_fpr), the achieved compression ratios (@fig:round_vs_primes_compression), 
 
-#figure(
-  image("img/round-vs-primes-compression.pdf"),
-  placement: bottom,
-  caption: [
-    Comparing compression efficiencies with Brotli between different bloom filters. The point where the primes curve
-    reaches 1:1 is where 50% of the bits in the bloom filter are set.
-  ],
-) <fig:round_vs_primes_compression>
+#place(
+  top,
+  scope: "parent",
+  float: true, 
+  grid(
+    columns: 3,
+    align: top,
+    gutter: 2.5mm,
+    [
+      #figure(
+        image("img/round-vs-primes-fpr.pdf"),
+        caption: [
+          Comparing the false positive rates between bloom filters that hash by taking the remainder after division by prime
+          numbers vs. numbers that are divisible by large powers of two.
+        ],
+      ) <fig:round_vs_primes_fpr>
+    ],  
+    [
+      #figure(
+        image("img/round-vs-primes-compression.pdf"),
+        caption: [
+          Comparing compression efficiencies with Brotli between different bloom filters. The point where the primes curve
+          reaches 1:1 is where 50% of the bits in the bloom filter are set.
+        ],
+      ) <fig:round_vs_primes_compression>
+    ],
+    [
+      #figure(
+        image("img/avg-steps-vs-rate.pdf"),
+        caption: [
+          Average number of tree search steps until the solver either solves a position or it detects that it is unsolvable.
+        ],
+      ) <fig:round_vs_primes_avg_steps>
+    ]
+  )
+)
+
+While the source of these discrepancies hasn't been analyzed in depth, it seems reasonable to assume that the reason has
+to do with the correlated hash outputs between similar positions in the #rn group.
+
+Note that even when we compare bloom filters with equivalent false positive rates, we observe a difference in the number
+of tree search steps required to solve a given start position. For solvable positions, the #rn bloom filters
+tend to find the end position more quickly, even with large false positive rates. For unsolvable positions however, they
+on average take much longer to determine that the position is indeed unsolvable (@fig:round_vs_primes_avg_steps).
+One possible explanation for this could be that the prime number bloom filters have their false positives more evenly
+distributed, and therefore don't get stuck in clusters of false positive positions as much.
+
+In order to select the best choice of $m$ for our application, it makes sense to evaluate the performance of the
+candidates in end-to-end evaluations. For interactive use of the solver, it is desirable to never make the user wait for
+a long time for the result, i.e. we're trying to minimize the worst-case of the solver step count. Our second objective
+is to minimize the download size, for which we consider only the Brotli-compressed version.
+
+We evaluate the bloom filters on a dataset of 65,536 solvable and 65,536 unsolvable (but still de-Bruijn-solvable)
+positions. Solvers are timed out after 15,050 steps (see #link(<sec:pseudocode>)[pseudocode section] for details).
+The results for the two optimal candidates are listed in @tbl:stats[Table].
+
+Using prime numbers is optimal for a low worst-case step count, whereas with round numbers we can get a much lower
+download size, at the cost of some unsolvable positions where the solver times out before detecting them as unsolvable.
+
+#let tablestroke = 0.6pt + rgb("888")
+#set table(
+  stroke: (x, y) => if x > 0 {
+    (left: tablestroke)
+  },
+  align: (x, y) => (
+    if x == 0 and y >= 2 { left + horizon }
+    else { center + horizon }
+  )
+)
+
+#set table.cell(inset: (x: 3pt, y: 4pt))
+#show table.cell: set text(size: 8pt)
+#show table.cell: set par(justify: false)
+
+#place(
+  top,
+  scope: "parent",
+  float: true, 
+  [
+    #figure(
+      caption: [Statistics for the best bloom filters from both groups.],
+      table(
+        columns: 10,
+        table.header(
+          table.cell(rowspan: 2, [Group]),
+          table.cell(rowspan: 2, [Filter Size $m$ [Bits]]),
+          table.cell(rowspan: 2, [Uncompressed Size [Bytes]]),
+          table.cell(rowspan: 2, [Compressed Size [Bytes]]),
+          table.cell(colspan: 3, [#h(8pt)Solvable Positions]),
+          table.cell(colspan: 3, [#h(8pt)Unsolvable Positions]),
+          [Average Steps],
+          [Max Steps],
+          [Completed],
+          [Average Steps],
+          [Max Steps],
+          [Completed],
+        ),
+        table.hline(stroke: tablestroke),
+        [#shortline(rgb(247,113,137)) Round], [268,435,456], [32.00 MiB], strong[2.74 MiB], [31.06], [1,658], [100%], [410.72], [15,050], [99.93%],
+        [#shortline(rgb(54,173,164)) Prime], [502,115,651], [59.86 MiB], [8.15 MiB], [31.50], [194], [100%], [6.68], [9,149], strong[100%],
+      )
+    ) <tbl:stats>
+  ]
+)
 
 
-TODO
 
 = Forcing Intermediate Positions
 
@@ -603,11 +707,11 @@ $
 
 If $"solve"(inv(P), E)$ does not find a sequence, then we know that $P$ is not reachable from the start. If it does find a sequence, then we only have to reverse that sequence to get the path from the start to $P$. For our implementation this means that we can reuse the same bloom filter for both segments, thus achieving our goal of keeping the download size low and allowing $P$ to be chosen at runtime, after all precomputations have finished.
 
-// TODO: introduce notation for function to compute path from A to B. Notation for inverse (bar)
 
-= Overall Pseudocode
+= Pseudocode
+<sec:pseudocode>
 
-
+TODO
 
 = Related Work
 
