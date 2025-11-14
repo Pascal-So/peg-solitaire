@@ -384,6 +384,7 @@
     set align(center)
     set text(size: 12pt, weight: "bold", style: "normal", hyphenate: false)
     block(
+      above: 21pt,
       below: 2pt,
       allcaps(it.body)
     )

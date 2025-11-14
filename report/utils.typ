@@ -1,4 +1,5 @@
 #import "@preview/cetz:0.4.1"
+#import "@preview/ctheorems:1.1.3": *
 
 #let hole_outline(x, y) = {
   cetz.draw.circle((x,y), radius: 0.35, stroke: 0.5pt)
@@ -75,3 +76,20 @@
   }
 }
 
+#let shortline(col) = [#box(rect(width: 8pt, height: 1.7pt, fill: col), baseline: -2pt)#sym.space.nobreak]
+
+#show: thmrules.with(qed-symbol: $square$)
+
+#let thm-padding = 1.5em
+#let theorem = thmplain(
+  "theorem",
+  "Theorem",
+  base: none,
+  titlefmt: strong,
+  inset: (top: 0em, left: thm-padding, right: thm-padding),
+)
+#let proof = thmproof(
+  "proof",
+  "Proof",
+  inset: (top: 0em, left: thm-padding, right: thm-padding),
+)
