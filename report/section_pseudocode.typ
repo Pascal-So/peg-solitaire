@@ -26,14 +26,14 @@ The algorithm is mainly based on a depth-first-search, but instead of tracking w
 we just skip nodes that are not present in the bloom filter.
 
 #code(title: [Depth-First-Search], [
-  + *function* DFS(node, steps)
+  + *function* DFS(node, steplimit)
     + *if* node #eq end
       + *return* #solved
-    + *if* steps #eq 0
+    + *if* steplimit #eq 0
       + *return* #timeout
     + *foreach* next *in* reachable nodes *do*
       + *if* normalized(next) $in$ bloomfilter
-        + *match* DFS(next, steps - 1)
+        + *match* DFS(next, steplimit - 1)
           + #solved $=>$ *return* #solved
           + #timeout $=>$ *return* #timeout
           + #unsolvable $=>$ *continue*
