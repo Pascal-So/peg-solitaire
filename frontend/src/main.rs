@@ -11,6 +11,7 @@ use yew_icons::{Icon, IconId};
 use crate::game_state::{GameState, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
+const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
 
 #[derive(Eq)]
 enum BloomFilterResource {
@@ -249,10 +250,8 @@ fn App() -> Html {
             let bloom_filter = bloom_filter.clone();
             bloom_filter.set(BloomFilterResource::Loading);
             wasm_bindgen_futures::spawn_local(async move {
-                let response = Request::get("http://localhost:8081/filter_173378771_1_norm.bin")
-                    .send()
-                    .await
-                    .unwrap();
+                let url = BLOOM_FILTER_URL.unwrap_or("/filter_173378771_1_norm.bin");
+                let response = Request::get(url).send().await.unwrap();
 
                 let body = response.binary().await.unwrap();
                 let filter = BloomFilter::load_from_slice(&body);
@@ -393,16 +392,16 @@ fn App() -> Html {
                             }
                         },
                         BloomFilterResource::Loading => html!{
-                            {"loading"}
+                            {"loading..."}
                         },
                         BloomFilterResource::NotRequested => html!{
                             <div>
-                                <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data need to be downloaded once initially."}</p>
+                                <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data need to be loaded once initially."}</p>
                                 <button
                                     style="font-size: inherit; margin-right: 1em"
                                     onclick={download_solver}
                                 >
-                                    {"download solver"}
+                                    {"activate solver"}
                                 </button>
                                 <TheoryLink/>
                             </div>

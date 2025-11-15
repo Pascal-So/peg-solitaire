@@ -355,9 +355,11 @@ fn convert_jump_sequence_to_moves(
     let mut moves = vec![];
 
     for &jump in jumps {
-        let m = arrangement
-            .check_move(jump.src, jump.dst)
-            .expect("jump sequence should be applicable to initial game state");
+        let m = match dir {
+            Direction::Forward => arrangement.check_move(jump.src, jump.dst),
+            Direction::Backward => arrangement.check_move_backwards(jump.src, jump.dst),
+        };
+        let m = m.expect("jump sequence should be applicable to initial game state");
         moves.push(m);
 
         arrangement = arrangement.apply_move(m, Direction::Forward);
