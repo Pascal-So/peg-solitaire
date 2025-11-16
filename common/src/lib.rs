@@ -1,6 +1,7 @@
 pub mod coord;
 pub mod debruijn;
 
+use std::fmt::Display;
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
@@ -52,57 +53,31 @@ impl Jump {
 impl Position {
     pub fn from_ascii(lines: [&str; 7]) -> Self {
         let mut position = 0;
-        let mut counted_chars = 0;
+        let mut current_peg_bitmask = 1;
+        let max_bitmask = 1 << 33;
         for line in lines {
             for c in line.chars() {
-                (position, counted_chars) = match c {
-                    '.' => (position * 2, counted_chars + 1),
-                    '#' => (position * 2 + 1, counted_chars + 1),
-                    ' ' => (position, counted_chars),
-                    _ => panic!("invalid char in ascii"),
-                };
+                match c {
+                    '.' => {
+                        current_peg_bitmask *= 2;
+                    }
+                    '#' => {
+                        position += current_peg_bitmask;
+                        current_peg_bitmask *= 2;
+                    }
+                    ' ' => {}
+                    _ => panic!("invalid char {c} in ascii"),
+                }
 
-                if counted_chars > 33 {
+                if current_peg_bitmask > max_bitmask {
                     panic!("too many chars in ascii");
                 }
             }
         }
-        if counted_chars < 33 {
+        if current_peg_bitmask < max_bitmask {
             panic!("not enough chars in ascii");
         }
         Self(position)
-    }
-
-    pub fn print(&self) {
-        let side_space = "  ";
-
-        let pos = self.0;
-        let mut mask = 1u64 << 32;
-        let mut print_bit = || {
-            print!("{}", if pos & mask > 0 { '#' } else { '.' });
-            mask /= 2;
-        };
-
-        for _ in 0..2 {
-            print!("{side_space}");
-            for _ in 0..3 {
-                print_bit();
-            }
-            println!("{side_space}");
-        }
-        for _ in 0..3 {
-            for _ in 0..7 {
-                print_bit();
-            }
-            println!();
-        }
-        for _ in 0..2 {
-            print!("{side_space}");
-            for _ in 0..3 {
-                print_bit();
-            }
-            println!("{side_space}");
-        }
     }
 
     pub fn default_start() -> Position {
@@ -228,6 +203,43 @@ impl Position {
 
     pub fn is_occupied(&self, coord: Coord) -> bool {
         self.0 & coord.bitmask() > 0
+    }
+}
+
+impl Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let side_space = "  ";
+
+        let pos = self.0;
+        let mut mask = 1u64;
+        let mut get_bit_char = || {
+            let char = if pos & mask > 0 { '#' } else { '.' };
+            mask *= 2;
+            char
+        };
+
+        for _ in 0..2 {
+            write!(f, "{side_space}")?;
+            for _ in 0..3 {
+                write!(f, "{}", get_bit_char())?;
+            }
+            writeln!(f, "{side_space}")?;
+        }
+        for _ in 0..3 {
+            for _ in 0..7 {
+                write!(f, "{}", get_bit_char())?;
+            }
+            writeln!(f)?;
+        }
+        for _ in 0..2 {
+            write!(f, "{side_space}")?;
+            for _ in 0..3 {
+                write!(f, "{}", get_bit_char())?;
+            }
+            writeln!(f, "{side_space}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -524,12 +536,23 @@ pub fn all_jumps() -> [Jump; 76] {
 
 #[cfg(test)]
 mod tests {
+    use proptest::proptest;
     use rand::{RngCore, SeedableRng};
     use tempfile::tempdir;
 
     use crate::coord::Coord;
 
     use super::*;
+
+    fn position_from_ascii_multiline(text: &str) -> Position {
+        let lines = text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        Position::from_ascii(lines)
+    }
 
     #[test]
     // test if the coordinate bits appear in the expected sequential order
@@ -557,28 +580,6 @@ mod tests {
     #[test]
     fn test_from_ascii() {
         let a = Position::from_ascii([
-            "    ...    ",
-            "    ...    ",
-            "  .......  ",
-            "  .......  ",
-            "  .......  ",
-            "    ...    ",
-            "    ..#    ",
-        ]);
-        assert_eq!(a.0, 1);
-
-        let a = Position::from_ascii([
-            "    ...    ",
-            "    ...    ",
-            "  .......  ",
-            "  .......  ",
-            "  .......  ",
-            "    ...    ",
-            "    .#.    ",
-        ]);
-        assert_eq!(a.0, 2);
-
-        let a = Position::from_ascii([
             "    #..    ",
             "    ...    ",
             "  .......  ",
@@ -587,7 +588,39 @@ mod tests {
             "    ...    ",
             "    ...    ",
         ]);
+        assert_eq!(a.0, 1);
+
+        let a = Position::from_ascii([
+            "    .#.    ",
+            "    ...    ",
+            "  .......  ",
+            "  .......  ",
+            "  .......  ",
+            "    ...    ",
+            "    ...    ",
+        ]);
+        assert_eq!(a.0, 2);
+
+        let a = Position::from_ascii([
+            "    ...    ",
+            "    ...    ",
+            "  .......  ",
+            "  .......  ",
+            "  .......  ",
+            "    ...    ",
+            "    ..#    ",
+        ]);
         assert_eq!(a.0, 1u64 << 32);
+    }
+
+    proptest! {
+        #[test]
+        fn test_from_ascii_reverses_print(mask in 0u64..8589934592) {
+            let position = Position(mask);
+            let ascii = format!("{position}");
+            let parsed = position_from_ascii_multiline(&ascii);
+            assert_eq!(position, parsed);
+        }
     }
 
     #[test]

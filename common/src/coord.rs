@@ -1,6 +1,7 @@
-use std::ops::Sub;
+use std::{fmt::Display, ops::Sub};
 
-/// A hole coordinate on the board. Centre hole is 0,0
+/// A hole coordinate on the board.
+/// Centre hole is 0,0, x increases to the right, y increases downwards.
 ///
 /// Invariant: can only represent valid coordinates
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -20,11 +21,7 @@ impl Sub for Coord {
 impl Coord {
     pub fn new(x: i8, y: i8) -> Option<Self> {
         let coord = Coord { x, y };
-        if coord.is_valid() {
-            Some(coord)
-        } else {
-            None
-        }
+        if coord.is_valid() { Some(coord) } else { None }
     }
 
     pub const fn center() -> Self {
@@ -71,5 +68,21 @@ impl Coord {
     }
     pub fn y(self) -> i8 {
         self.y
+    }
+}
+
+impl Display for Coord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_topleft_should_be_lowest_bit() {
+        assert_eq!(Coord::new(-1, -3).unwrap().bitmask(), 1);
     }
 }

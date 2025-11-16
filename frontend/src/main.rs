@@ -1,4 +1,5 @@
 mod game_state;
+mod reducible_game_state;
 
 use common::{BloomFilter, coord::Coord};
 use gloo_net::http::Request;
