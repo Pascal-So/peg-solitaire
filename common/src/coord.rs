@@ -28,7 +28,7 @@ impl Coord {
         Coord { x: 0, y: 0 }
     }
 
-    pub fn bitmask(self) -> u64 {
+    pub fn hole_idx(self) -> u8 {
         let x = self.x + 3;
         let y = self.y + 3;
         let idx = match (y, x) {
@@ -37,8 +37,11 @@ impl Coord {
             (5..=6, 2..=4) => (x - 2) + (y - 5) * 3 + 27,
             _ => unreachable!("invalid coordinates in Coord struct should be impossible"),
         };
+        idx as u8
+    }
 
-        1u64 << idx
+    pub fn bitmask(self) -> u64 {
+        1u64 << self.hole_idx()
     }
 
     pub fn rotate(self) -> Coord {

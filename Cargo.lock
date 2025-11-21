@@ -245,6 +245,7 @@ dependencies = [
  "gloo-net 0.6.0",
  "gloo-timers 0.3.0",
  "log",
+ "proptest",
  "wasm-bindgen-futures",
  "wasm-logger",
  "web-sys",

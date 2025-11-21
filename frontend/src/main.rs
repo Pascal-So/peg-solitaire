@@ -1,7 +1,7 @@
 mod game_state;
 mod reducible_game_state;
 
-use common::{BloomFilter, coord::Coord};
+use common::{BloomFilter, Direction, coord::Coord};
 use gloo_net::http::Request;
 use gloo_timers::future::TimeoutFuture;
 use web_sys::HtmlElement;
@@ -9,7 +9,7 @@ use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
-use crate::game_state::{GameState, Solvability};
+use crate::reducible_game_state::{GameAction, GameState, Mode, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
 const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
@@ -35,10 +35,8 @@ impl PartialEq for BloomFilterResource {
 fn App() -> Html {
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 
-    let game_state = use_state(|| GameState::new());
-    let selected = use_state(|| None);
+    let game_state = use_reducer(|| GameState::new());
     let display_scale = use_state(|| 1.0);
-    let edit_mode = use_state(|| false);
     let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
     let solver_visible = use_state(|| false);
@@ -46,153 +44,105 @@ fn App() -> Html {
     let scroll_target = use_state(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
 
-    use_effect_with(
-        (
-            game_state.clone(),
-            solver_visible.clone(),
-            bloom_filter.clone(),
-        ),
-        |(game_state, solver_visible, bloom_filter)| {
-            if **solver_visible && let BloomFilterResource::Loaded(bloom_filter) = &**bloom_filter {
-                game_state.set(GameState::clone(&**game_state).rerun_solver(bloom_filter));
-            }
-        },
-    );
+    // use_effect_with(
+    //     (
+    //         game_state.clone(),
+    //         solver_visible.clone(),
+    //         bloom_filter.clone(),
+    //     ),
+    //     |(game_state, solver_visible, bloom_filter)| {
+    //         if **solver_visible && let BloomFilterResource::Loaded(bloom_filter) = &**bloom_filter {
+    //             game_state.set(GameState::clone(&**game_state).rerun_solver(bloom_filter));
+    //         }
+    //     },
+    // );
 
-    use_effect_with((game_state.clone(), scroll_target.clone()), {
-        move |(game_state, scroll_target)| {
-            let scroll_target = scroll_target.clone();
-            let game_state = game_state.clone();
-            *scroll_command_id.borrow_mut() += 1;
-            let current_id = *scroll_command_id.borrow();
-            let scroll_command_id = scroll_command_id.clone();
+    // use_effect_with((game_state.clone(), scroll_target.clone()), {
+    //     move |(game_state, scroll_target)| {
+    //         let scroll_target = scroll_target.clone();
+    //         let game_state = game_state.clone();
+    //         *scroll_command_id.borrow_mut() += 1;
+    //         let current_id = *scroll_command_id.borrow();
+    //         let scroll_command_id = scroll_command_id.clone();
 
-            wasm_bindgen_futures::spawn_local(async move {
-                TimeoutFuture::new(80).await;
+    //         wasm_bindgen_futures::spawn_local(async move {
+    //             TimeoutFuture::new(80).await;
 
-                if *scroll_command_id.borrow() != current_id {
-                    return;
-                }
+    //             if *scroll_command_id.borrow() != current_id {
+    //                 return;
+    //             }
 
-                if let Some(target) = *scroll_target {
-                    let nr_pegs = game_state.nr_pegs();
-                    let dir = if nr_pegs < target {
-                        common::Direction::Backward
-                    } else if nr_pegs == target {
-                        scroll_target.set(None);
-                        return;
-                    } else {
-                        common::Direction::Forward
-                    };
+    //             if let Some(target) = *scroll_target {
+    //                 let nr_pegs = game_state.nr_pegs();
+    //                 let dir = if nr_pegs < target {
+    //                     common::Direction::Backward
+    //                 } else if nr_pegs == target {
+    //                     scroll_target.set(None);
+    //                     return;
+    //                 } else {
+    //                     common::Direction::Forward
+    //                 };
 
-                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(dir));
-                };
-            });
-        }
-    });
+    //                 game_state.set(GameState::clone(&*game_state).move_along_solve_path(dir));
+    //             };
+    //         });
+    //     }
+    // });
 
     let reset = {
         let game_state = game_state.clone();
-        let selected = selected.clone();
         let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
-            log::info!("reset");
-            selected.set(None);
+            game_state.dispatch(GameAction::Reset);
             scroll_target.set(None);
-            game_state.set(GameState::new());
         })
     };
 
     let undo = {
         let game_state = game_state.clone();
-        let selected = selected.clone();
         let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
             if game_state.can_undo() {
-                log::info!("undo");
-                selected.set(None);
                 scroll_target.set(None);
-                game_state.set(GameState::clone(&game_state).undo());
+                game_state.dispatch(GameAction::Undo);
             }
         })
     };
 
     let redo = {
         let game_state = game_state.clone();
-        let selected = selected.clone();
         let scroll_target = scroll_target.clone();
         Callback::from(move |_| {
             if game_state.can_redo() {
-                log::info!("redo");
-                selected.set(None);
                 scroll_target.set(None);
-                game_state.set(GameState::clone(&game_state).redo());
+                game_state.dispatch(GameAction::Redo);
             }
         })
     };
 
-    let move_peg = Callback::from({
-        let game_state = game_state.clone();
-        move |(src, dst): (Coord, Coord)| {
-            let Some(move_info) = game_state.check_move(src, dst) else {
-                return;
-            };
-            game_state.set(GameState::clone(&game_state).apply_move(move_info));
-        }
-    });
-
     let holeclick = {
-        let selected = selected.clone();
         let game_state = game_state.clone();
-        let move_peg = move_peg.clone();
-        let edit_mode = edit_mode.clone();
-        let has_made_first_move = has_made_first_move.clone();
         let scroll_target = scroll_target.clone();
 
         move |coord: Coord| {
-            let selected = selected.clone();
-            let move_peg = move_peg.clone();
             let game_state = game_state.clone();
-            let edit_mode = edit_mode.clone();
-            let has_made_first_move = has_made_first_move.clone();
             let scroll_target = scroll_target.clone();
-
             Callback::from(move |_: MouseEvent| {
                 scroll_target.set(None);
-
-                if *edit_mode {
-                    game_state.set(GameState::clone(&game_state).edit_toggle_peg(coord));
-                    has_made_first_move.set(true);
-                    return;
-                }
-
-                if *selected == Some(coord) {
-                    selected.set(None);
-                    return;
-                }
-
-                match game_state.lookup(coord) {
-                    Some(_) => selected.set(Some(coord)),
-                    None => {
-                        if let Some(src) = *selected {
-                            move_peg.emit((src, coord));
-                            has_made_first_move.set(true);
-                            selected.set(None);
-                        }
-                    }
-                }
+                game_state.dispatch(GameAction::ClickHole { coord });
             })
         }
     };
 
+    let edit_mode = game_state.mode == Mode::Edit;
+
     let cell_classes = {
-        let edit_mode = edit_mode.clone();
-        let selected = selected.clone();
+        let selected = game_state.selected_coord();
 
         move |coord: Coord| {
             let mut classes = Classes::new();
             classes.push("game-cell");
-            if *selected == Some(coord) && !*edit_mode {
+            if selected == Some(coord) && !edit_mode {
                 classes.push("selected");
             }
             classes
@@ -201,7 +151,7 @@ fn App() -> Html {
 
     let mut overall_classes = Classes::new();
     overall_classes.push("game-grid");
-    if *edit_mode {
+    if edit_mode {
         overall_classes.push("edit-mode");
     }
 
@@ -230,11 +180,13 @@ fn App() -> Html {
     });
 
     let edit = {
-        let edit_mode = edit_mode.clone();
-        let selected = selected.clone();
+        let new_mode = match game_state.mode {
+            Mode::Play => Mode::Edit,
+            Mode::Edit => Mode::Play,
+        };
+        let game_state = game_state.clone();
         Callback::from(move |_| {
-            edit_mode.set(!*edit_mode);
-            selected.set(None);
+            game_state.dispatch(GameAction::SetMode { mode: new_mode });
         })
     };
 
@@ -261,7 +213,7 @@ fn App() -> Html {
         })
     };
 
-    log::info!("Current position: {}", game_state.as_position().0);
+    log::info!("Current position: {:?}", game_state.as_position());
 
     let current_nr_pegs = game_state.nr_pegs();
 
@@ -269,19 +221,19 @@ fn App() -> Html {
         <div ref={div_ref} class="scaling-container" style={format!("transform: scale({})", *display_scale)}>
             <div class={overall_classes}>
                 <button
-                    style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", b2f(game_state.can_undo() || *edit_mode))}
+                    style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", b2f(game_state.can_undo() || edit_mode))}
                     onclick={reset}
                 >
                     {"reset"}
                 </button>
                 <button
-                    style={format!("grid-row: 2; grid-column: 1; opacity: {};", b2f(game_state.can_undo() && !*edit_mode))}
+                    style={format!("grid-row: 2; grid-column: 1; opacity: {};", b2f(game_state.can_undo() && !edit_mode))}
                     onclick={undo}
                 >
                     <Icon icon_id={IconId::LucideUndo2} class="icon"/>
                 </button>
                 <button
-                    style={format!("grid-row: 2; grid-column: 2; opacity: {};", b2f(game_state.can_redo() && !*edit_mode))}
+                    style={format!("grid-row: 2; grid-column: 2; opacity: {};", b2f(game_state.can_redo() && !edit_mode))}
                     onclick={redo}
                 >
                     <Icon icon_id={IconId::LucideRedo2} class="icon"/>
@@ -291,7 +243,7 @@ fn App() -> Html {
                     style="grid-row: 1; grid-column: 6/8;"
                     onclick={edit}
                 >
-                    {if *edit_mode {"done"} else {"edit"}}
+                    {if edit_mode {"done"} else {"edit"}}
                 </button>
 
                 <button
@@ -326,13 +278,13 @@ fn App() -> Html {
                 {
                     match &*bloom_filter {
                         BloomFilterResource::Loaded(_) => {
-                            let (backward, forward) = game_state.is_solvable();
+                            let (backward, forward) = (Solvability::No, Solvability::No); // game_state.is_solvable();
                             let move_backward = {
                                 let game_state = game_state.clone();
                                 let scroll_target = scroll_target.clone();
                                 Callback::from(move |_| {
                                     scroll_target.set(None);
-                                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(common::Direction::Backward));
+                                    game_state.dispatch(GameAction::StepSolution {dir: Direction::Backward});
                                 })
                             };
                             let move_forward = {
@@ -340,7 +292,7 @@ fn App() -> Html {
                                 let scroll_target = scroll_target.clone();
                                 Callback::from(move |_| {
                                     scroll_target.set(None);
-                                    game_state.set(GameState::clone(&*game_state).move_along_solve_path(common::Direction::Forward));
+                                    game_state.dispatch(GameAction::StepSolution {dir: Direction::Forward});
                                 })
                             };
                             let move_to_start = {

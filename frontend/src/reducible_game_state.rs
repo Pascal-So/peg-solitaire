@@ -16,6 +16,7 @@ pub enum Mode {
 pub enum GameAction {
     ClickHole { coord: Coord },
     SetMode { mode: Mode },
+    Reset,
     Undo,
     Redo,
     RegisterSolver { solver: () },
@@ -32,7 +33,8 @@ pub struct GameState {
     solve_path: SolvePath,
     arrangement: Arrangement,
     selection: Option<usize>,
-    mode: Mode,
+    pub mode: Mode,
+    has_made_first_move: bool,
 }
 
 impl GameState {
@@ -44,6 +46,7 @@ impl GameState {
             arrangement: Arrangement::new(),
             selection: None,
             mode: Mode::Play,
+            has_made_first_move: false,
         }
     }
     pub fn selected_coord(&self) -> Option<Coord> {
@@ -63,6 +66,9 @@ impl GameState {
         }
         Position(out)
     }
+    pub fn nr_pegs(&self) -> i32 {
+        self.pegs().filter(|peg| peg.alive).count() as i32
+    }
     pub fn pegs(&self) -> impl Iterator<Item = &Peg> {
         self.arrangement.pegs.iter()
     }
@@ -70,6 +76,7 @@ impl GameState {
     fn apply_move(&mut self, move_info: MoveInfo, dir: Direction) {
         self.arrangement = self.arrangement.apply_move(move_info, dir);
         self.selection = None;
+        self.has_made_first_move = true;
         // self.solve_paths.update(move_info, dir);
 
         self.history.push(HistoryEntry::Move(move_info));
@@ -178,6 +185,7 @@ impl Reducible for GameState {
 
                 let mut state = (*self).clone();
                 let entry = state.history.pop().unwrap();
+                state.selection = None;
 
                 match entry {
                     HistoryEntry::Edit(mut arrangement) => {
@@ -220,6 +228,11 @@ impl Reducible for GameState {
 
                 state.into()
             }
+            (GameAction::Reset, _) => {
+                let mut state = GameState::new();
+                state.has_made_first_move = self.has_made_first_move;
+                state.into()
+            }
             (GameAction::RegisterSolver { solver }, _) => todo!(),
             (GameAction::StepSolution { dir }, _) => todo!(),
             (GameAction::SetMode { mode }, _) => {
@@ -247,6 +260,8 @@ impl SolvePath {
             path: [(); NR_PEGS - 2],
         }
     }
+
+    // pub fn recompute(&mut self, solver: &BloomFilter, current_arrangement: Arrangement)
 
     pub fn clear(&mut self) {
         todo!()
@@ -358,9 +373,6 @@ impl Default for Arrangement {
 pub struct GameState2 {
     arrangement: Arrangement,
 
-    history: Vec<HistoryEntry>,
-    redo: Vec<HistoryEntry>,
-
     path_from_start: Option<Vec<MoveInfo>>,
     path_to_end: Option<Vec<MoveInfo>>,
 }
@@ -370,39 +382,17 @@ pub struct GameState2 {
 /// has been changed in between, but as long as tokens are immediately
 /// used, this is fine.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct MoveInfo {
+struct MoveInfo {
     moved_idx: usize,
     eliminated_idx: usize,
     src: Coord,
     dst: Coord,
-    // todo: store mid coordinate
 }
 
 impl GameState2 {
-    pub fn new() -> Self {
-        Self {
-            arrangement: Arrangement::default(),
-            history: Vec::new(),
-            path_from_start: Some(vec![]),
-            path_to_end: None,
-            redo: Vec::new(),
-        }
-    }
-
     pub fn pegs(&self) -> impl Iterator<Item = &Peg> {
         self.arrangement.pegs.iter()
     }
-
-    /// Check if the move is possible, and if yes, return a token that can be used
-    /// to apply the move.
-    pub fn check_move(&self, src: Coord, dst: Coord) -> Option<MoveInfo> {
-        self.arrangement.check_move(src, dst)
-    }
-
-    pub fn nr_pegs(&self) -> i32 {
-        self.pegs().filter(|peg| peg.alive).count() as i32
-    }
-
     pub fn is_solvable(&self) -> (Solvability, Solvability) {
         let from_option = |opt: &Option<_>| {
             if opt.is_some() {
@@ -472,131 +462,6 @@ impl GameState2 {
         } else {
             *forwards = None;
         }
-    }
-
-    fn apply_move_inner(mut self, move_info: MoveInfo, dir: Direction) -> Self {
-        self.arrangement = self.arrangement.apply_move(move_info, dir);
-        self.update_solve_paths(move_info, dir);
-
-        self.history.push(HistoryEntry::Move(move_info));
-        if self.redo.pop() != Some(HistoryEntry::Move(move_info)) {
-            self.redo.clear();
-        }
-
-        self
-    }
-    pub fn apply_move(self, move_info: MoveInfo) -> Self {
-        self.apply_move_inner(move_info, Direction::Forward)
-    }
-
-    pub fn move_along_solve_path(self, dir: Direction) -> Self {
-        let path = match dir {
-            Direction::Forward => self.path_to_end.as_ref(),
-            Direction::Backward => self.path_from_start.as_ref(),
-        };
-
-        if let Some(path) = path
-            && let Some(&move_info) = path.last()
-        {
-            self.apply_move_inner(move_info, dir)
-        } else {
-            self
-        }
-    }
-
-    pub fn can_undo(&self) -> bool {
-        !self.history.is_empty()
-    }
-
-    pub fn can_redo(&self) -> bool {
-        !self.redo.is_empty()
-    }
-
-    pub fn undo(mut self) -> Self {
-        let Some(entry) = self.history.pop() else {
-            return self;
-        };
-
-        match entry {
-            HistoryEntry::Edit(mut arrangement) => {
-                std::mem::swap(&mut self.arrangement, &mut arrangement);
-                self.redo.push(HistoryEntry::Edit(arrangement));
-                self.path_from_start = None;
-                self.path_to_end = None;
-            }
-            HistoryEntry::Move(last_move) => {
-                self.redo.push(HistoryEntry::Move(last_move));
-                self.arrangement = self.arrangement.apply_move(last_move, Direction::Backward);
-                self.update_solve_paths(last_move, Direction::Backward);
-            }
-        }
-
-        self
-    }
-
-    pub fn redo(mut self) -> Self {
-        let Some(entry) = self.redo.pop() else {
-            return self;
-        };
-
-        match entry {
-            HistoryEntry::Edit(mut arrangement) => {
-                std::mem::swap(&mut self.arrangement, &mut arrangement);
-                self.history.push(HistoryEntry::Edit(arrangement));
-                self.path_from_start = None;
-                self.path_to_end = None;
-            }
-            HistoryEntry::Move(move_info) => {
-                self.history.push(HistoryEntry::Move(move_info));
-                self.arrangement = self.arrangement.apply_move(move_info, Direction::Forward);
-                self.update_solve_paths(move_info, Direction::Forward);
-            }
-        }
-
-        self
-    }
-
-    pub fn lookup(&self, coord: Coord) -> Option<usize> {
-        for (i, p) in self.pegs().enumerate() {
-            if p.coord == coord && p.alive {
-                return Some(i);
-            }
-        }
-
-        None
-    }
-
-    pub fn edit_toggle_peg(mut self, coord: Coord) -> Self {
-        let old_arrangement = self.arrangement.clone();
-        let mut changed = false;
-
-        if let Some(idx) = self.lookup(coord) {
-            self.arrangement.pegs[idx].alive = false;
-            changed = true;
-        } else {
-            for p in self.arrangement.pegs.iter_mut() {
-                if !p.alive {
-                    p.alive = true;
-                    p.coord = coord;
-                    changed = true;
-                    break;
-                }
-            }
-        }
-
-        if changed {
-            // If the last history entry already contains an edit, then we
-            // don't append another entry. This has the effect of combining
-            // all the edits into one.
-            // TODO: add an edit session id or something like that, so that
-            // we can have one undo step per edit session.
-            if !matches!(self.history.last(), Some(&HistoryEntry::Edit(_))) {
-                self.history.push(HistoryEntry::Edit(old_arrangement));
-            }
-            self.redo.clear();
-        }
-
-        self
     }
 
     pub fn as_position(&self) -> Position {
@@ -670,26 +535,26 @@ mod tests {
     fn game_state() -> Rc<GameState> {
         Rc::new(GameState::new())
     }
+    fn click_action(x: i8, y: i8) -> GameAction {
+        GameAction::ClickHole {
+            coord: Coord::new(x, y).unwrap(),
+        }
+    }
     fn game_state_after_one_move() -> Rc<GameState> {
         let gs = game_state();
-        let gs = gs.reduce(GameAction::ClickHole {
-            coord: Coord::new(2, 0).unwrap(),
-        });
-        let gs = gs.reduce(GameAction::ClickHole {
-            coord: Coord::center(),
-        });
+        let gs = gs.reduce(click_action(2, 0));
+        let gs = gs.reduce(click_action(0, 0));
         gs
     }
 
     #[test]
     fn test_select_deselect() {
         let gs = game_state();
-        let coord = Coord::new(2, 0).unwrap();
 
-        let gs = gs.reduce(GameAction::ClickHole { coord: coord });
-        assert_eq!(gs.selected_coord(), Some(coord));
+        let gs = gs.reduce(click_action(2, 0));
+        assert_eq!(gs.selected_coord(), Some(Coord::new(2, 0).unwrap()));
 
-        let gs = gs.reduce(GameAction::ClickHole { coord: coord });
+        let gs = gs.reduce(click_action(2, 0));
         assert_eq!(
             gs.selection, None,
             "clicking the same position again should deselect"
@@ -745,9 +610,7 @@ mod tests {
 
         assert_eq!(gs.as_position(), Position::default_start());
 
-        let gs = gs.reduce(GameAction::ClickHole {
-            coord: Coord::new(1, 2).unwrap(),
-        });
+        let gs = gs.reduce(click_action(1, 2));
 
         let expected = Position::from_ascii([
             "    ###    ",
@@ -760,13 +623,7 @@ mod tests {
         ]);
         assert_eq!(gs.as_position(), expected);
 
-        let gs = gs
-            .reduce(GameAction::ClickHole {
-                coord: Coord::new(0, 2).unwrap(),
-            })
-            .reduce(GameAction::ClickHole {
-                coord: Coord::new(1, 2).unwrap(),
-            });
+        let gs = gs.reduce(click_action(0, 2)).reduce(click_action(1, 2));
 
         let expected = Position::from_ascii([
             "    ###    ",
@@ -781,20 +638,59 @@ mod tests {
     }
 
     #[test]
+    fn test_reset() {
+        let gs = game_state_after_one_move().reduce(click_action(-1, -1));
+
+        assert!(gs.selected_coord().is_some());
+
+        let gs = gs.reduce(GameAction::Reset);
+
+        assert!(gs.selected_coord().is_none());
+        assert_eq!(gs.as_position(), Position::default_start());
+    }
+    #[test]
+    fn test_undo_resets_selection() {
+        let gs = game_state_after_one_move().reduce(click_action(-1, -1));
+
+        assert!(gs.selected_coord().is_some());
+
+        let gs = gs.reduce(GameAction::Undo);
+        assert!(gs.selected_coord().is_none());
+    }
+
+    #[test]
     fn test_multiple_edits_count_as_one_undo_step() {
         let gs = game_state();
         let gs = gs
             .reduce(GameAction::SetMode { mode: Mode::Edit })
-            .reduce(GameAction::ClickHole {
-                coord: Coord::new(1, 2).unwrap(),
-            })
-            .reduce(GameAction::ClickHole {
-                coord: Coord::new(2, 0).unwrap(),
-            });
+            .reduce(click_action(1, 2))
+            .reduce(click_action(2, 0));
 
         let gs = gs.reduce(GameAction::Undo);
         assert_eq!(gs.as_position(), Position::default_start());
         assert!(!gs.can_undo());
+    }
+
+    #[test]
+    fn test_has_made_first_move() {
+        let gs = game_state();
+
+        // selecting a peg does not count as a move
+        let gs = gs.reduce(click_action(2, 0));
+        assert!(!gs.has_made_first_move);
+
+        let gs = gs.reduce(click_action(0, 0));
+        assert!(gs.has_made_first_move);
+
+        // resetting does not reset first move flag
+        let gs = gs.reduce(GameAction::Reset);
+        assert!(gs.has_made_first_move);
+    }
+
+    #[test]
+    fn test_nr_pegs() {
+        assert_eq!(game_state().nr_pegs(), 32);
+        assert_eq!(game_state_after_one_move().nr_pegs(), 31);
     }
 
     #[test]

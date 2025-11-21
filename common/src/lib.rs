@@ -13,6 +13,7 @@ use rand_pcg::Pcg64Mcg;
 use crate::{coord::Coord, debruijn::de_bruijn_solvable};
 
 pub const NR_PEGS: usize = 32;
+pub const NR_HOLES: usize = 33;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Position(pub u64);
