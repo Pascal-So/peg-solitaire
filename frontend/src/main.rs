@@ -1,5 +1,4 @@
 mod game_state;
-mod reducible_game_state;
 
 use common::{BloomFilter, Direction, coord::Coord};
 use gloo_net::http::Request;
@@ -9,7 +8,7 @@ use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
-use crate::reducible_game_state::{GameAction, GameState, Mode, Solvability};
+use crate::game_state::{GameAction, GameState, Mode, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
 const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
@@ -261,7 +260,7 @@ fn App() -> Html {
                     />
                 }) }
 
-                { for game_state.pegs().enumerate().map(|(i, p)| {
+                { for game_state.pegs().into_iter().enumerate().map(|(i, p)| {
                     let left = PX_HOLE_DISTANCE * (p.coord.x() as i16 + 3);
                     let top = PX_HOLE_DISTANCE * (p.coord.y() as i16 + 3);
                     html!{

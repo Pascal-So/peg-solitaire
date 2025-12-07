@@ -4,7 +4,7 @@ use common::{Direction, NR_HOLES, Position};
 
 use crate::game_state::permutation::Permutation;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Arrangement {
     /// Current permutation of pegs on the board. The `forward` method maps
     /// from hole indices to peg identities.
@@ -99,6 +99,11 @@ impl Arrangement {
             }
         }
         Position(out)
+    }
+
+    pub fn is_occupied(&self, coord: Coord) -> bool {
+        let peg_id = self.permutation.forward(coord.hole_idx());
+        self.alive[peg_id as usize]
     }
 }
 
