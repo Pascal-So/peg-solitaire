@@ -1,7 +1,7 @@
 pub mod coord;
 pub mod debruijn;
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
@@ -12,17 +12,22 @@ use rand_pcg::Pcg64Mcg;
 
 use crate::{coord::Coord, debruijn::de_bruijn_solvable};
 
+/// The number of pegs present in the default start position.
 pub const NR_PEGS: usize = 32;
+
+/// The total number of holes on the board.
 pub const NR_HOLES: usize = 33;
 
+/// A game position stored as a bitfield. For every hole we store if it is
+/// empty (stored as zero) or occupied by a peg (stored as one).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Position(pub u64);
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Jump {
     remove_bits: u64,
     add_bits: u64,
     pub src: Coord,
-    mid: Coord,
     pub dst: Coord,
 }
 
@@ -45,7 +50,6 @@ impl Jump {
             remove_bits,
             add_bits,
             src,
-            mid,
             dst,
         })
     }
@@ -250,6 +254,15 @@ pub struct BloomFilter {
     nr_bits: u32,
     k: u32,
     bits: BincodeBitBox,
+}
+
+impl Debug for BloomFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BloomFilter")
+            .field("nr_bits", &self.nr_bits)
+            .field("k", &self.k)
+            .finish()
+    }
 }
 
 impl Eq for BloomFilter {}
@@ -523,7 +536,6 @@ pub fn all_jumps() -> [Jump; 76] {
                 remove_bits,
                 add_bits,
                 src: coord_a,
-                mid: coord_b,
                 dst: coord_c,
             };
             Some(j)

@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
-use common::{
-    BloomFilter, Direction, NR_PEGS, Position, coord::Coord, debruijn::de_bruijn_solvable,
-    solve_with_bloom_filter,
-};
+use common::{BloomFilter, Direction, Position, coord::Coord};
 use yew::Reducible;
 
-use crate::game_state::arrangement::{Arrangement, Peg};
+use crate::game_state::{
+    arrangement::{Arrangement, Peg},
+    solver::SolvePath,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -14,21 +14,21 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum GameAction {
     ClickHole { coord: Coord },
     SetMode { mode: Mode },
     Reset,
     Undo,
     Redo,
-    RegisterSolver { solver: () },
+    RegisterSolver { solver: Rc<BloomFilter> },
     StepSolution { dir: Direction },
 }
 
 /// Game State as seen from the user interface. The interaction with this state
 /// happens through [GameAction]s that are sent to Yew's
 /// [`use_reducer`](https://docs.rs/yew/0.21.0/yew/functional/fn.use_reducer.html)
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct GameState {
     history: Vec<HistoryEntry>,
     redo: Vec<HistoryEntry>,
@@ -37,18 +37,22 @@ pub struct GameState {
     selection: Option<Coord>,
     pub mode: Mode,
     has_made_first_move: bool,
+    bloom_filter: Option<Rc<BloomFilter>>,
 }
 
 impl GameState {
     pub fn new() -> GameState {
+        let arrangement = Arrangement::new();
+
         Self {
             history: vec![],
             redo: vec![],
-            solve_path: SolvePath::new(),
-            arrangement: Arrangement::new(),
+            solve_path: SolvePath::new(arrangement.as_position()),
+            arrangement,
             selection: None,
             mode: Mode::Play,
             has_made_first_move: false,
+            bloom_filter: None,
         }
     }
     pub fn selected_coord(&self) -> Option<Coord> {
@@ -80,6 +84,10 @@ impl GameState {
 
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
+    }
+
+    pub fn has_made_first_move(&self) -> bool {
+        self.has_made_first_move
     }
 }
 
@@ -129,10 +137,22 @@ impl Reducible for GameState {
                             Ok(_) => {
                                 // successfully made a move
                                 state.has_made_first_move = true;
-                                state.history.push(HistoryEntry::Move {
+                                let mv = Move {
                                     src: selected_coord,
                                     dst: coord,
-                                });
+                                };
+                                log::info!(
+                                    "mv(c({}, {}), c({}, {}))",
+                                    mv.src.x(),
+                                    mv.src.y(),
+                                    mv.dst.x(),
+                                    mv.dst.y()
+                                );
+                                state.history.push(HistoryEntry::Move(mv));
+                                state.solve_path.apply_move(mv, Direction::Forward);
+                                if let Some(bf) = &self.bloom_filter {
+                                    state.solve_path.recompute(bf, state.as_position());
+                                }
                                 state.redo.clear();
                                 state.selection = None;
                             }
@@ -146,11 +166,18 @@ impl Reducible for GameState {
                 }
             }
             (GameAction::ClickHole { coord }, Mode::Edit) => {
+                // Clicking a hole (or peg) in edit mode means toggling peg
+                // presence in that location.
+
                 let mut state = (*self).clone();
 
                 let old_arrangement = self.arrangement;
 
                 state.arrangement.toggle_hole(coord);
+                state.solve_path = SolvePath::new(state.as_position());
+                if let Some(bf) = &self.bloom_filter {
+                    state.solve_path.recompute(bf, state.as_position());
+                }
 
                 // If the last history entry already contains an edit, then we
                 // don't append another entry. This has the effect of combining
@@ -177,15 +204,21 @@ impl Reducible for GameState {
                     HistoryEntry::Edit(mut arrangement) => {
                         std::mem::swap(&mut state.arrangement, &mut arrangement);
                         state.redo.push(HistoryEntry::Edit(arrangement));
-                        // state.solve_path.clear();
+                        state.solve_path = SolvePath::new(state.as_position());
+                        if let Some(bf) = &self.bloom_filter {
+                            state.solve_path.recompute(bf, state.as_position());
+                        }
                     }
-                    HistoryEntry::Move { src, dst } => {
-                        state.redo.push(HistoryEntry::Move { src, dst });
+                    HistoryEntry::Move(mv) => {
+                        state.redo.push(HistoryEntry::Move(mv));
                         state
                             .arrangement
-                            .perform_move(src, dst, Direction::Backward)
+                            .perform_move(mv.src, mv.dst, Direction::Backward)
                             .unwrap();
-                        // state.solve_path.update(last_move, Direction::Backward);
+                        state.solve_path.apply_move(mv, Direction::Backward);
+                        if let Some(bf) = &self.bloom_filter {
+                            state.solve_path.recompute(bf, state.as_position());
+                        }
                     }
                 }
 
@@ -204,15 +237,21 @@ impl Reducible for GameState {
                     HistoryEntry::Edit(mut arrangement) => {
                         std::mem::swap(&mut state.arrangement, &mut arrangement);
                         state.history.push(HistoryEntry::Edit(arrangement));
-                        // state.solve_path.clear();
+                        state.solve_path = SolvePath::new(state.as_position());
+                        if let Some(bf) = &self.bloom_filter {
+                            state.solve_path.recompute(bf, state.as_position());
+                        }
                     }
-                    HistoryEntry::Move { src, dst } => {
-                        state.history.push(HistoryEntry::Move { src, dst });
+                    HistoryEntry::Move(mv) => {
+                        state.history.push(HistoryEntry::Move(mv));
                         state
                             .arrangement
-                            .perform_move(src, dst, Direction::Forward)
+                            .perform_move(mv.src, mv.dst, Direction::Forward)
                             .unwrap();
-                        // state.solve_path.update(move_info, Direction::Forward);
+                        state.solve_path.apply_move(mv, Direction::Forward);
+                        if let Some(bf) = &self.bloom_filter {
+                            state.solve_path.recompute(bf, state.as_position());
+                        }
                     }
                 }
 
@@ -223,7 +262,11 @@ impl Reducible for GameState {
                 state.has_made_first_move = self.has_made_first_move;
                 state.into()
             }
-            (GameAction::RegisterSolver { solver }, _) => todo!(),
+            (GameAction::RegisterSolver { solver }, _) => {
+                let mut state = GameState::new();
+                state.bloom_filter = Some(solver);
+                state.into()
+            }
             (GameAction::StepSolution { dir }, _) => todo!(),
             (GameAction::SetMode { mode }, _) => {
                 if mode == self.mode {
@@ -239,29 +282,17 @@ impl Reducible for GameState {
     }
 }
 
-#[derive(Debug, Clone)]
-struct SolvePath {
-    path: [(); NR_PEGS - 2], // todo
-}
-
-impl SolvePath {
-    pub fn new() -> Self {
-        Self {
-            path: [(); NR_PEGS - 2],
-        }
-    }
-
-    // pub fn recompute(&mut self, solver: &BloomFilter, current_arrangement: Arrangement)
-
-    pub fn clear(&mut self) {
-        todo!()
-    }
-}
-
 #[derive(Clone, Debug)]
 enum HistoryEntry {
     Edit(Arrangement),
-    Move { src: Coord, dst: Coord },
+    Move(Move),
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct Move {
+    // todo: unify with `Jump` instead?
+    pub src: Coord,
+    pub dst: Coord,
 }
 
 // pub fn rerun_solver(mut self, bloom_filter: &BloomFilter) -> Self {
@@ -482,14 +513,14 @@ mod tests {
 
         // selecting a peg does not count as a move
         let gs = gs.reduce(click_action(2, 0));
-        assert!(!gs.has_made_first_move);
+        assert!(!gs.has_made_first_move());
 
         let gs = gs.reduce(click_action(0, 0));
-        assert!(gs.has_made_first_move);
+        assert!(gs.has_made_first_move());
 
         // resetting does not reset first move flag
         let gs = gs.reduce(GameAction::Reset);
-        assert!(gs.has_made_first_move);
+        assert!(gs.has_made_first_move());
     }
 
     #[test]
@@ -500,6 +531,8 @@ mod tests {
 
     #[test]
     fn undo_and_redo_keeps_solve_path_intact() {
+        let gs = game_state();
+
         // todo
     }
 }

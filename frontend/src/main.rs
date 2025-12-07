@@ -1,5 +1,7 @@
 mod game_state;
 
+use std::rc::Rc;
+
 use common::{BloomFilter, Direction, coord::Coord};
 use gloo_net::http::Request;
 use gloo_timers::future::TimeoutFuture;
@@ -15,7 +17,7 @@ const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
 
 #[derive(Eq)]
 enum BloomFilterResource {
-    Loaded(BloomFilter),
+    Loaded(Rc<BloomFilter>),
     Loading,
     NotRequested,
 }
@@ -39,7 +41,6 @@ fn App() -> Html {
     let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
     let solver_visible = use_state(|| false);
-    let has_made_first_move = use_state(|| false);
     let scroll_target = use_state(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
 
@@ -207,7 +208,7 @@ fn App() -> Html {
 
                 let body = response.binary().await.unwrap();
                 let filter = BloomFilter::load_from_slice(&body);
-                bloom_filter.set(BloomFilterResource::Loaded(filter));
+                bloom_filter.set(BloomFilterResource::Loaded(Rc::new(filter)));
             });
         })
     };
@@ -239,14 +240,14 @@ fn App() -> Html {
                 </button>
 
                 <button
-                    style="grid-row: 1; grid-column: 6/8;"
+                    style={format!("grid-row: 1; grid-column: 6/8; opacity: {};", b2f(game_state.has_made_first_move()))}
                     onclick={edit}
                 >
                     {if edit_mode {"done"} else {"edit"}}
                 </button>
 
                 <button
-                    style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(*has_made_first_move))}
+                    style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(game_state.has_made_first_move()))}
                     onclick={toggle_solver}
                 >
                     {"solver"}
@@ -368,7 +369,7 @@ fn App() -> Html {
 #[function_component]
 fn TheoryLink() -> Html {
     html! {
-        <a href="todo.pdf" target="_blank">
+        <a href="https://projects.pascalsommer.ch/pegsolitaire/precomputing-pegsolitaire-paper.pdf" target="_blank">
             <span style="vertical-align: middle">
                 {"read the theory"}
             </span><img

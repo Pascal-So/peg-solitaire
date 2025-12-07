@@ -19,7 +19,7 @@ impl Sub for Coord {
 }
 
 impl Coord {
-    pub fn new(x: i8, y: i8) -> Option<Self> {
+    pub const fn new(x: i8, y: i8) -> Option<Self> {
         let coord = Coord { x, y };
         if coord.is_valid() { Some(coord) } else { None }
     }
@@ -55,7 +55,7 @@ impl Coord {
         Self::new(self.x + x, self.y + y)
     }
 
-    fn is_valid(self) -> bool {
+    const fn is_valid(self) -> bool {
         matches!(
             (self.x, self.y),
             (-3..=-2, -1..=1) | (-1..=1, -3..=3) | (2..=3, -1..=1)
@@ -77,6 +77,12 @@ impl Coord {
 impl Display for Coord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.x, self.y)
+    }
+}
+
+impl Default for Coord {
+    fn default() -> Self {
+        Self::center()
     }
 }
 
