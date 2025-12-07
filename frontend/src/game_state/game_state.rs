@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use common::{BloomFilter, Direction, Position, coord::Coord};
+use common::{BloomFilter, Direction, NR_HOLES, Position, coord::Coord};
 use yew::Reducible;
 
 use crate::game_state::{
@@ -74,7 +74,7 @@ impl GameState {
     pub fn nr_pegs(&self) -> i32 {
         self.arrangement.nr_pegs() as i32
     }
-    pub fn pegs(&self) -> impl IntoIterator<Item = Peg> {
+    pub fn pegs(&self) -> [Peg; NR_HOLES] {
         self.arrangement.pegs()
     }
 

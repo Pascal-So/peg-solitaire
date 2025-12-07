@@ -1,3 +1,4 @@
+mod components;
 mod game_state;
 
 use std::rc::Rc;
