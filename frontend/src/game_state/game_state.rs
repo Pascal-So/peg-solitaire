@@ -425,6 +425,12 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_undo_is_ignored() {
+        let gs = game_state();
+        gs.reduce(GameAction::Undo);
+    }
+
+    #[test]
     fn test_redo_move() {
         let gs = game_state_after_one_move();
         let position = gs.as_position();

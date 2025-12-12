@@ -1,9 +1,5 @@
 use common::{BloomFilter, NR_HOLES, coord::Coord};
-use gloo_net::http::Request;
-use gloo_timers::future::TimeoutFuture;
-use web_sys::HtmlElement;
 use yew::prelude::*;
-use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
 use crate::game_state::Peg;
@@ -26,7 +22,7 @@ pub struct BoardProps {
 
 /// Render the game board with pegs and holes, plus some surrounding buttons.
 #[function_component]
-fn Board(
+pub fn Board(
     BoardProps {
         has_made_first_move,
         edit_mode,
@@ -107,7 +103,7 @@ fn Board(
             </button>
 
             <button
-                style="grid-row: 1; grid-column: 6/8;"
+                style={format!("grid-row: 1; grid-column: 6/8; opacity: {};", b2f(*has_made_first_move))}
                 onclick={toggle_edit_mode}
             >
                 {if *edit_mode {"done"} else {"edit"}}

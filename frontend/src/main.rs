@@ -11,6 +11,7 @@ use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_icons::{Icon, IconId};
 
+use crate::components::board::Board;
 use crate::game_state::{GameAction, GameState, Mode, Solvability};
 
 const PX_HOLE_DISTANCE: i16 = 34;
@@ -102,23 +103,27 @@ fn App() -> Html {
     let undo = {
         let game_state = game_state.clone();
         let scroll_target = scroll_target.clone();
-        Callback::from(move |_| {
-            if game_state.can_undo() {
+        if game_state.can_undo() {
+            Some(Callback::from(move |_| {
                 scroll_target.set(None);
                 game_state.dispatch(GameAction::Undo);
-            }
-        })
+            }))
+        } else {
+            None
+        }
     };
 
     let redo = {
         let game_state = game_state.clone();
         let scroll_target = scroll_target.clone();
-        Callback::from(move |_| {
-            if game_state.can_redo() {
+        if game_state.can_redo() {
+            Some(Callback::from(move |_| {
                 scroll_target.set(None);
                 game_state.dispatch(GameAction::Redo);
-            }
-        })
+            }))
+        } else {
+            None
+        }
     };
 
     let holeclick = {
@@ -126,12 +131,8 @@ fn App() -> Html {
         let scroll_target = scroll_target.clone();
 
         move |coord: Coord| {
-            let game_state = game_state.clone();
-            let scroll_target = scroll_target.clone();
-            Callback::from(move |_: MouseEvent| {
-                scroll_target.set(None);
-                game_state.dispatch(GameAction::ClickHole { coord });
-            })
+            scroll_target.set(None);
+            game_state.dispatch(GameAction::ClickHole { coord });
         }
     };
 
@@ -220,60 +221,18 @@ fn App() -> Html {
 
     html! {
         <div ref={div_ref} class="scaling-container" style={format!("transform: scale({})", *display_scale)}>
-            <div class={overall_classes}>
-                <button
-                    style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", b2f(game_state.can_undo() || edit_mode))}
-                    onclick={reset}
-                >
-                    {"reset"}
-                </button>
-                <button
-                    style={format!("grid-row: 2; grid-column: 1; opacity: {};", b2f(game_state.can_undo() && !edit_mode))}
-                    onclick={undo}
-                >
-                    <Icon icon_id={IconId::LucideUndo2} class="icon"/>
-                </button>
-                <button
-                    style={format!("grid-row: 2; grid-column: 2; opacity: {};", b2f(game_state.can_redo() && !edit_mode))}
-                    onclick={redo}
-                >
-                    <Icon icon_id={IconId::LucideRedo2} class="icon"/>
-                </button>
-
-                <button
-                    style={format!("grid-row: 1; grid-column: 6/8; opacity: {};", b2f(game_state.has_made_first_move()))}
-                    onclick={edit}
-                >
-                    {if edit_mode {"done"} else {"edit"}}
-                </button>
-
-                <button
-                    style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(game_state.has_made_first_move()))}
-                    onclick={toggle_solver}
-                >
-                    {"solver"}
-                </button>
-
-                { for Coord::all().into_iter().map(|coord| html! {
-                    <div
-                        class={cell_classes(coord)}
-                        onmousedown={holeclick(coord)}
-                        style={format!("grid-row: {}; grid-column: {};", coord.y() + 4, coord.x() + 4)}
-                    />
-                }) }
-
-                { for game_state.pegs().into_iter().enumerate().map(|(i, p)| {
-                    let left = PX_HOLE_DISTANCE * (p.coord.x() as i16 + 3);
-                    let top = PX_HOLE_DISTANCE * (p.coord.y() as i16 + 3);
-                    html!{
-                        <div
-                            class="peg"
-                            key={i}
-                            style={format!("left: {left}px; top: {top}px; opacity: {};", b2f(p.alive))}
-                        />
-                    }
-                }) }
-            </div>
+            <Board
+                has_made_first_move={game_state.has_made_first_move()}
+                edit_mode={edit_mode}
+                selected={game_state.selected_coord()}
+                reset={reset}
+                undo={undo}
+                redo={redo}
+                holeclick={holeclick}
+                toggle_solver={toggle_solver}
+                toggle_edit_mode={edit}
+                pegs={game_state.pegs()}
+            />
 
             <div class="solver-box" style={format!("opacity: {};", b2f(*solver_visible))}>
                 {
