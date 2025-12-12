@@ -1,9 +1,12 @@
 pub mod coord;
 pub mod debruijn;
 
-use std::fmt::{Debug, Display};
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
+use std::{
+    fmt::{Debug, Display},
+    ops::Not,
+};
 
 use bincode::config;
 use bitvec::{bitbox, boxed::BitBox, prelude::Lsb0};
@@ -385,13 +388,24 @@ impl bincode::Encode for BincodeBitBox {
     }
 }
 
-/// Time (or move) direction
+/// Time direction of a move
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Direction {
     /// Forward move, removing pegs from the board
     Forward,
     /// Backward move, adding pegs to the board
     Backward,
+}
+
+impl Not for Direction {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Direction::Forward => Direction::Backward,
+            Direction::Backward => Direction::Forward,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]

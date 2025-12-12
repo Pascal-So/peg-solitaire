@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Permutation<const N: usize> {
     forward: [u8; N],
     backward: [u8; N],

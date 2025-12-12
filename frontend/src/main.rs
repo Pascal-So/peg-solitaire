@@ -9,17 +9,15 @@ use gloo_timers::future::TimeoutFuture;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
-use yew_icons::{Icon, IconId};
 
 use crate::components::board::Board;
 use crate::game_state::{GameAction, GameState, Mode, Solvability};
 
-const PX_HOLE_DISTANCE: i16 = 34;
 const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
 
 #[derive(Eq)]
 enum BloomFilterResource {
-    Loaded(Rc<BloomFilter>),
+    Loaded,
     Loading,
     NotRequested,
 }
@@ -46,50 +44,37 @@ fn App() -> Html {
     let scroll_target = use_state(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
 
-    // use_effect_with(
-    //     (
-    //         game_state.clone(),
-    //         solver_visible.clone(),
-    //         bloom_filter.clone(),
-    //     ),
-    //     |(game_state, solver_visible, bloom_filter)| {
-    //         if **solver_visible && let BloomFilterResource::Loaded(bloom_filter) = &**bloom_filter {
-    //             game_state.set(GameState::clone(&**game_state).rerun_solver(bloom_filter));
-    //         }
-    //     },
-    // );
+    use_effect_with((game_state.clone(), scroll_target.clone()), {
+        move |(game_state, scroll_target)| {
+            let scroll_target = scroll_target.clone();
+            let game_state = game_state.clone();
+            *scroll_command_id.borrow_mut() += 1;
+            let current_id = *scroll_command_id.borrow();
+            let scroll_command_id = scroll_command_id.clone();
 
-    // use_effect_with((game_state.clone(), scroll_target.clone()), {
-    //     move |(game_state, scroll_target)| {
-    //         let scroll_target = scroll_target.clone();
-    //         let game_state = game_state.clone();
-    //         *scroll_command_id.borrow_mut() += 1;
-    //         let current_id = *scroll_command_id.borrow();
-    //         let scroll_command_id = scroll_command_id.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                TimeoutFuture::new(80).await;
 
-    //         wasm_bindgen_futures::spawn_local(async move {
-    //             TimeoutFuture::new(80).await;
+                if *scroll_command_id.borrow() != current_id {
+                    return;
+                }
 
-    //             if *scroll_command_id.borrow() != current_id {
-    //                 return;
-    //             }
+                if let Some(target) = *scroll_target {
+                    let nr_pegs = game_state.nr_pegs();
+                    let dir = if nr_pegs < target {
+                        common::Direction::Backward
+                    } else if nr_pegs == target {
+                        scroll_target.set(None);
+                        return;
+                    } else {
+                        common::Direction::Forward
+                    };
 
-    //             if let Some(target) = *scroll_target {
-    //                 let nr_pegs = game_state.nr_pegs();
-    //                 let dir = if nr_pegs < target {
-    //                     common::Direction::Backward
-    //                 } else if nr_pegs == target {
-    //                     scroll_target.set(None);
-    //                     return;
-    //                 } else {
-    //                     common::Direction::Forward
-    //                 };
-
-    //                 game_state.set(GameState::clone(&*game_state).move_along_solve_path(dir));
-    //             };
-    //         });
-    //     }
-    // });
+                    game_state.dispatch(GameAction::StepSolution { dir });
+                };
+            });
+        }
+    });
 
     let reset = {
         let game_state = game_state.clone();
@@ -137,19 +122,6 @@ fn App() -> Html {
     };
 
     let edit_mode = game_state.mode == Mode::Edit;
-
-    let cell_classes = {
-        let selected = game_state.selected_coord();
-
-        move |coord: Coord| {
-            let mut classes = Classes::new();
-            classes.push("game-cell");
-            if selected == Some(coord) && !edit_mode {
-                classes.push("selected");
-            }
-            classes
-        }
-    };
 
     let mut overall_classes = Classes::new();
     overall_classes.push("game-grid");
@@ -201,16 +173,19 @@ fn App() -> Html {
 
     let download_solver = {
         let bloom_filter = bloom_filter.clone();
+        let game_state = game_state.clone();
         Callback::from(move |_| {
             let bloom_filter = bloom_filter.clone();
+            let game_state = game_state.clone();
             bloom_filter.set(BloomFilterResource::Loading);
             wasm_bindgen_futures::spawn_local(async move {
                 let url = BLOOM_FILTER_URL.unwrap_or("/filter_173378771_1_norm.bin");
                 let response = Request::get(url).send().await.unwrap();
 
                 let body = response.binary().await.unwrap();
-                let filter = BloomFilter::load_from_slice(&body);
-                bloom_filter.set(BloomFilterResource::Loaded(Rc::new(filter)));
+                let filter = Rc::new(BloomFilter::load_from_slice(&body));
+                bloom_filter.set(BloomFilterResource::Loaded);
+                game_state.dispatch(GameAction::RegisterSolver { solver: filter });
             });
         })
     };
@@ -237,8 +212,8 @@ fn App() -> Html {
             <div class="solver-box" style={format!("opacity: {};", b2f(*solver_visible))}>
                 {
                     match &*bloom_filter {
-                        BloomFilterResource::Loaded(_) => {
-                            let (backward, forward) = (Solvability::No, Solvability::No); // game_state.is_solvable();
+                        BloomFilterResource::Loaded => {
+                            let (backward, forward) = game_state.is_solvable();
                             let move_backward = {
                                 let game_state = game_state.clone();
                                 let scroll_target = scroll_target.clone();
@@ -309,7 +284,7 @@ fn App() -> Html {
                         },
                         BloomFilterResource::NotRequested => html!{
                             <div>
-                                <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data need to be loaded once initially."}</p>
+                                <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data will be loaded once initially."}</p>
                                 <button
                                     style="font-size: inherit; margin-right: 1em"
                                     onclick={download_solver}

@@ -1,4 +1,4 @@
-use common::{BloomFilter, NR_HOLES, coord::Coord};
+use common::{NR_HOLES, coord::Coord};
 use yew::prelude::*;
 use yew_icons::{Icon, IconId};
 

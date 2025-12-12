@@ -1,4 +1,6 @@
-use common::{BloomFilter, Direction, NR_PEGS, Position, coord::Coord};
+use common::{
+    BloomFilter, Direction, NR_PEGS, Position, SolveResult, coord::Coord, solve_with_bloom_filter,
+};
 
 use crate::game_state::game_state::Move;
 
@@ -8,7 +10,7 @@ use crate::game_state::game_state::Move;
 /// the move follows the known solve path, then we remain on that path and
 /// no new solve run is required. If we leave the known path, then we might
 /// have to recompute.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SolvePath {
     path: [Move; NR_PEGS - 1],
 
@@ -114,7 +116,9 @@ impl SolvePath {
         }
     }
 
-    /// Get the index into the `path` variable
+    /// Get the index into the `path` variable. This returns `None` if there
+    /// are no more moves in this direction because we've already reached
+    /// the end.
     fn get_index_in_direction(&self, dir: Direction) -> Option<usize> {
         match dir {
             Direction::Forward => {
@@ -142,7 +146,69 @@ impl SolvePath {
     /// state is already in.
     pub fn recompute(&mut self, bloom_filter: &BloomFilter, pos: Position) {
         assert_eq!(pos.count() as usize, self.current_nr_pegs);
-        todo!()
+
+        if self.forward == Solvability::Unknown {
+            log::info!("recomputint forward");
+            let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Forward, 0).0;
+
+            match solve_result {
+                SolveResult::Solved(jumps) => {
+                    log::info!("solved");
+                    match self.get_index_in_direction(Direction::Forward) {
+                        Some(idx) => {
+                            let slice = &mut self.path[idx..];
+                            assert_eq!(slice.len(), jumps.len());
+                            for (mv, jump) in slice.iter_mut().zip(jumps.into_iter()) {
+                                mv.src = jump.src;
+                                mv.dst = jump.dst;
+                            }
+                        }
+                        None => {
+                            log::warn!(
+                                "solvability was set to Unknown even though we're at the end??"
+                            )
+                        }
+                    }
+                    self.forward = self.get_solvability_in_direction(Direction::Forward);
+                }
+                SolveResult::Unsolvable => {
+                    log::info!("unsolvable");
+                    self.forward = Solvability::Unsolvable;
+                }
+                SolveResult::TimedOut => {}
+            }
+        }
+        if self.backward == Solvability::Unknown {
+            log::info!("recomputint backward");
+            let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Backward, 0).0;
+
+            match solve_result {
+                SolveResult::Solved(jumps) => {
+                    log::info!("solved");
+                    match self.get_index_in_direction(Direction::Backward) {
+                        Some(idx) => {
+                            let slice = &mut self.path[..=idx];
+                            assert_eq!(slice.len(), jumps.len());
+                            for (mv, jump) in slice.iter_mut().zip(jumps.into_iter().rev()) {
+                                mv.src = jump.src;
+                                mv.dst = jump.dst;
+                            }
+                        }
+                        None => {
+                            log::warn!(
+                                "solvability was set to Unknown even though we're at the end??"
+                            )
+                        }
+                    }
+                    self.backward = self.get_solvability_in_direction(Direction::Backward);
+                }
+                SolveResult::Unsolvable => {
+                    log::info!("unsolvable");
+                    self.backward = Solvability::Unsolvable;
+                }
+                SolveResult::TimedOut => {}
+            }
+        }
     }
 }
 

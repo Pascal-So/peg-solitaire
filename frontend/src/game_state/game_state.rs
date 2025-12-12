@@ -5,7 +5,7 @@ use yew::Reducible;
 
 use crate::game_state::{
     arrangement::{Arrangement, Peg},
-    solver::SolvePath,
+    solver::{self, SolvePath},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,7 +28,7 @@ pub enum GameAction {
 /// Game State as seen from the user interface. The interaction with this state
 /// happens through [GameAction]s that are sent to Yew's
 /// [`use_reducer`](https://docs.rs/yew/0.21.0/yew/functional/fn.use_reducer.html)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GameState {
     history: Vec<HistoryEntry>,
     redo: Vec<HistoryEntry>,
@@ -89,6 +89,22 @@ impl GameState {
     pub fn has_made_first_move(&self) -> bool {
         self.has_made_first_move
     }
+
+    pub fn is_solvable(&self) -> (Solvability, Solvability) {
+        fn convert(s: solver::Solvability) -> Solvability {
+            match s {
+                solver::Solvability::Solvable(_) => Solvability::Yes,
+                solver::Solvability::Solved => Solvability::Yes,
+                solver::Solvability::Unsolvable => Solvability::No,
+                solver::Solvability::Unknown => Solvability::Maybe,
+            }
+        }
+
+        (
+            convert(self.solve_path.next_move(Direction::Backward)),
+            convert(self.solve_path.next_move(Direction::Forward)),
+        )
+    }
 }
 
 impl Reducible for GameState {
@@ -141,14 +157,9 @@ impl Reducible for GameState {
                                     src: selected_coord,
                                     dst: coord,
                                 };
-                                log::info!(
-                                    "mv(c({}, {}), c({}, {}))",
-                                    mv.src.x(),
-                                    mv.src.y(),
-                                    mv.dst.x(),
-                                    mv.dst.y()
-                                );
-                                state.history.push(HistoryEntry::Move(mv));
+                                state
+                                    .history
+                                    .push(HistoryEntry::Move(mv, Direction::Forward));
                                 state.solve_path.apply_move(mv, Direction::Forward);
                                 if let Some(bf) = &self.bloom_filter {
                                     state.solve_path.recompute(bf, state.as_position());
@@ -209,13 +220,13 @@ impl Reducible for GameState {
                             state.solve_path.recompute(bf, state.as_position());
                         }
                     }
-                    HistoryEntry::Move(mv) => {
-                        state.redo.push(HistoryEntry::Move(mv));
+                    HistoryEntry::Move(mv, dir) => {
+                        state.redo.push(HistoryEntry::Move(mv, dir));
                         state
                             .arrangement
-                            .perform_move(mv.src, mv.dst, Direction::Backward)
+                            .perform_move(mv.src, mv.dst, !dir)
                             .unwrap();
-                        state.solve_path.apply_move(mv, Direction::Backward);
+                        state.solve_path.apply_move(mv, !dir);
                         if let Some(bf) = &self.bloom_filter {
                             state.solve_path.recompute(bf, state.as_position());
                         }
@@ -242,13 +253,10 @@ impl Reducible for GameState {
                             state.solve_path.recompute(bf, state.as_position());
                         }
                     }
-                    HistoryEntry::Move(mv) => {
-                        state.history.push(HistoryEntry::Move(mv));
-                        state
-                            .arrangement
-                            .perform_move(mv.src, mv.dst, Direction::Forward)
-                            .unwrap();
-                        state.solve_path.apply_move(mv, Direction::Forward);
+                    HistoryEntry::Move(mv, dir) => {
+                        state.history.push(HistoryEntry::Move(mv, dir));
+                        state.arrangement.perform_move(mv.src, mv.dst, dir).unwrap();
+                        state.solve_path.apply_move(mv, dir);
                         if let Some(bf) = &self.bloom_filter {
                             state.solve_path.recompute(bf, state.as_position());
                         }
@@ -263,11 +271,25 @@ impl Reducible for GameState {
                 state.into()
             }
             (GameAction::RegisterSolver { solver }, _) => {
-                let mut state = GameState::new();
+                // todo: maybe add a way to disable the solver while we're not
+                // showing the solver toolbar?
+                let mut state = (*self).clone();
+                state.solve_path.recompute(&solver, state.as_position());
                 state.bloom_filter = Some(solver);
                 state.into()
             }
-            (GameAction::StepSolution { dir }, _) => todo!(),
+            (GameAction::StepSolution { dir }, _) => {
+                if let solver::Solvability::Solvable(mv) = self.solve_path.next_move(dir) {
+                    let mut state = (*self).clone();
+                    state.history.push(HistoryEntry::Move(mv, dir));
+                    state.arrangement.perform_move(mv.src, mv.dst, dir).unwrap();
+                    state.solve_path.apply_move(mv, dir);
+
+                    state.into()
+                } else {
+                    self
+                }
+            }
             (GameAction::SetMode { mode }, _) => {
                 if mode == self.mode {
                     return self;
@@ -282,10 +304,10 @@ impl Reducible for GameState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum HistoryEntry {
     Edit(Arrangement),
-    Move(Move),
+    Move(Move, Direction),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -294,60 +316,6 @@ pub struct Move {
     pub src: Coord,
     pub dst: Coord,
 }
-
-// pub fn rerun_solver(mut self, bloom_filter: &BloomFilter) -> Self {
-//     let pos = self.as_position();
-//     if !de_bruijn_solvable(pos) {
-//         self.path_from_start = None;
-//         self.path_to_end = None;
-//     } else {
-//         for (path, dir) in [
-//             (&mut self.path_to_end, Direction::Forward),
-//             (&mut self.path_from_start, Direction::Backward),
-//         ] {
-//             if path.is_none() {
-//                 if dir == Direction::Backward {
-//                     // backwards is currently not implemented yet
-//                     continue;
-//                 }
-
-//                 log::info!("running solver for direction {dir:?}");
-//                 match solve_with_bloom_filter(pos, bloom_filter, dir, 0).0 {
-//                     common::SolveResult::Solved(jumps) => {
-//                         let mut moves =
-//                             convert_jump_sequence_to_moves(self.arrangement.clone(), &jumps, dir);
-//                         moves.reverse();
-//                         *path = Some(moves);
-//                     }
-//                     _ => {}
-//                 }
-//             }
-//         }
-//     }
-//     self
-// }
-
-// /// Should be called after a move has been successfully applied to the arrangement.
-// /// Here we try to keep the solve paths from the start and to the end updated without
-// /// re-running the solver, but only by updating the existing cached values
-// fn update_solve_paths(&mut self, move_info: MoveInfo, dir: Direction) {
-//     let (forwards, backwards) = match dir {
-//         Direction::Forward => (&mut self.path_to_end, &mut self.path_from_start),
-//         Direction::Backward => (&mut self.path_from_start, &mut self.path_to_end),
-//     };
-
-//     if let Some(backwards) = backwards {
-//         backwards.push(move_info);
-//     }
-
-//     if let Some(forwards) = forwards
-//         && forwards.last() == Some(&move_info)
-//     {
-//         forwards.pop();
-//     } else {
-//         *forwards = None;
-//     }
-// }
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Solvability {

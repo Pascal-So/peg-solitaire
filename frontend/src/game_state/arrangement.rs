@@ -4,7 +4,7 @@ use common::{Direction, NR_HOLES, Position};
 
 use crate::game_state::permutation::Permutation;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Arrangement {
     /// Current permutation of pegs on the board. The `forward` method maps
     /// from hole indices to peg identities.
