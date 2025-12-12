@@ -268,6 +268,7 @@ impl Reducible for GameState {
             (GameAction::Reset, _) => {
                 let mut state = GameState::new();
                 state.has_made_first_move = self.has_made_first_move;
+                state.bloom_filter = self.bloom_filter.clone();
                 state.into()
             }
             (GameAction::RegisterSolver { solver }, _) => {

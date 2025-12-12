@@ -69,7 +69,11 @@ impl SolvePath {
                 if self.forward == Solvability::Solvable(mv) {
                     // we moved along the known path
                     self.forward = self.get_solvability_in_direction(Direction::Forward);
-                    self.backward = self.get_solvability_in_direction(Direction::Backward);
+                    if self.backward.solvable() {
+                        self.backward = self.get_solvability_in_direction(Direction::Backward);
+                    } else {
+                        self.backward = Solvability::Unknown;
+                    }
                 } else {
                     // we left the last computed solve path
                     self.forward = Solvability::Unknown;
@@ -82,8 +86,12 @@ impl SolvePath {
                 self.current_nr_pegs += 1;
 
                 if self.backward == Solvability::Solvable(mv) {
-                    // we moved along the known path
-                    self.forward = self.get_solvability_in_direction(Direction::Forward);
+                    // we moved along the known backwards path
+                    if self.forward.solvable() {
+                        self.forward = self.get_solvability_in_direction(Direction::Forward);
+                    } else {
+                        self.forward = Solvability::Unknown;
+                    }
                     self.backward = self.get_solvability_in_direction(Direction::Backward);
                 } else {
                     // we left the last computed solve path
@@ -149,11 +157,13 @@ impl SolvePath {
 
         if self.forward == Solvability::Unknown {
             log::info!("recomputint forward");
+            println!("recomputint forward");
             let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Forward, 0).0;
 
             match solve_result {
                 SolveResult::Solved(jumps) => {
                     log::info!("solved");
+                    println!("solved");
                     match self.get_index_in_direction(Direction::Forward) {
                         Some(idx) => {
                             let slice = &mut self.path[idx..];
@@ -173,6 +183,7 @@ impl SolvePath {
                 }
                 SolveResult::Unsolvable => {
                     log::info!("unsolvable");
+                    println!("unsolvable");
                     self.forward = Solvability::Unsolvable;
                 }
                 SolveResult::TimedOut => {}
@@ -180,11 +191,13 @@ impl SolvePath {
         }
         if self.backward == Solvability::Unknown {
             log::info!("recomputint backward");
+            println!("recomputint backward");
             let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Backward, 0).0;
 
             match solve_result {
                 SolveResult::Solved(jumps) => {
                     log::info!("solved");
+                    println!("solved");
                     match self.get_index_in_direction(Direction::Backward) {
                         Some(idx) => {
                             let slice = &mut self.path[..=idx];
@@ -204,6 +217,7 @@ impl SolvePath {
                 }
                 SolveResult::Unsolvable => {
                     log::info!("unsolvable");
+                    println!("unsolvable");
                     self.backward = Solvability::Unsolvable;
                 }
                 SolveResult::TimedOut => {}
@@ -272,8 +286,22 @@ pub enum Solvability {
     Unknown,
 }
 
+impl Solvability {
+    /// Check if the position is either solvable or already solved.
+    pub fn solvable(self) -> bool {
+        match self {
+            Solvability::Solvable(_) => true,
+            Solvability::Solved => true,
+            Solvability::Unsolvable => false,
+            Solvability::Unknown => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use common::Jump;
+
     use super::*;
     #[test]
     fn test_forwards_backwards_move_preserves_solution_path() {
@@ -325,5 +353,69 @@ mod tests {
             solve_path.next_move(Direction::Backward),
             Solvability::Solvable(other_mv)
         );
+    }
+
+    #[test]
+    fn test_backwards_from_unknown_is_unknown() {
+        let pos = Position::from_ascii([
+            "    ###    ",
+            "    .#.    ",
+            "  ..#..##  ",
+            "  ....#.#  ",
+            "  .##.#..  ",
+            "    #..    ",
+            "    ###    ",
+        ]);
+        let mut solve_path = SolvePath::new(pos);
+        let mv = Move {
+            src: Coord::new(-1, -1).unwrap(),
+            dst: Coord::new(1, -1).unwrap(),
+        };
+
+        solve_path.apply_move(mv, Direction::Backward);
+        assert_eq!(solve_path.forward, Solvability::Unknown);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_undoing_does_not_magically_make_forward_path_solvable() {
+        let bf =
+            BloomFilter::load_from_file("../precompute/filters/modulo/filter_502115651_1_norm.bin");
+
+        // We start at a position that is unsolvable in
+        // the forwards direction.
+        let pos = Position::from_ascii([
+            "    ###    ",
+            "    .#.    ",
+            "  ..#..##  ",
+            "  ....#.#  ",
+            "  .##.#..  ",
+            "    #..    ",
+            "    ###    ",
+        ]);
+        let mut solve_path = SolvePath::new(pos);
+        solve_path.recompute(&bf, pos);
+        assert_eq!(solve_path.forward, Solvability::Unsolvable);
+
+        // Then move one step forwards.
+        let mv = Move {
+            src: Coord::new(1, 1).unwrap(),
+            dst: Coord::new(1, -1).unwrap(),
+        };
+        solve_path.apply_move(mv, Direction::Forward);
+        solve_path.recompute(
+            &bf,
+            pos.apply_jump(Jump::from_coordinate_pair(mv.src, mv.dst).unwrap()),
+        );
+        assert_eq!(solve_path.forward, Solvability::Unsolvable);
+
+        // Then move back again. Note that we don't recompute the forwards
+        // path again here.
+        solve_path.apply_move(mv, Direction::Backward);
+        assert_eq!(solve_path.forward, Solvability::Unknown);
+
+        // check if forwards is still unsolvable once we recompute the paths
+        solve_path.recompute(&bf, pos);
+        assert_eq!(solve_path.forward, Solvability::Unsolvable);
     }
 }
