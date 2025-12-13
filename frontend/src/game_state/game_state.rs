@@ -285,6 +285,9 @@ impl Reducible for GameState {
                     state.history.push(HistoryEntry::Move(mv, dir));
                     state.arrangement.perform_move(mv.src, mv.dst, dir).unwrap();
                     state.solve_path.apply_move(mv, dir);
+                    if let Some(bf) = &self.bloom_filter {
+                        state.solve_path.recompute(bf, state.as_position());
+                    }
 
                     state.into()
                 } else {
