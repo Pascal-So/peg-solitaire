@@ -1,5 +1,11 @@
 #import "template/jacow.typ": jacow
 
+#set page(foreground: rotate(34deg,
+  text(68pt, fill: rgb("22222231"))[
+    *Work In Progress*
+  ]
+))
+
 #show: jacow.with(
   title: [Precomputing Peg Solitaire],
   authors: (
