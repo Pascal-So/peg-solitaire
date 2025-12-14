@@ -48,7 +48,7 @@ more.
     import cetz.draw: *
 
     group({
-      rotate(4.8deg)
+      rotate(-2deg)
       board("start")
       content(
         (2.4, 2.7),
@@ -58,7 +58,7 @@ more.
     })
     translate(x: 2.2, y: -5.7)
     group({
-      rotate(1.1deg)
+      rotate(-2deg)
       board("mid")
       content(
         (2.4, 2.7),
@@ -82,7 +82,7 @@ more.
 Our goal in this work is to develop a tool that players can use to automatically find a sequence of moves to reach the
 end position if such a sequence exists, or to tell the player that they have entered an unsolvable position.
 
-To make the Peg Solitaire solver tool accessible to a wide audience,
+To make the peg solitaire solver tool accessible to a wide audience,
 it makes sense to deploy it as a WebAssembly-based application so that users can access it from their desktop or mobile device
 without having to install anything. This also allows us to deploy the tool without having to run any application-specific
 software on the server, instead allowing us to rely just on a static file server.
@@ -95,11 +95,12 @@ statistics we are interested in.
 
 #figure(
   caption: [
-    Overview of the state space. We compare four different sets:
+    Overview of the state space. We compare the following sets:
     #shortline(rgb(247,113,137))Solvable, the set of positions that can reach the end,
     #shortline(rgb(80,177,49))Reachable, the positions that can be reached from the start,
     #shortline(rgb(54,173,164))the intersection of those two sets,
-    #shortline(rgb("#666"))the set of all possible positions, regardless of whether they can actually be reached during normal play.
+    #shortline(rgb("#666"))the set of all possible positions, regardless of whether they can actually be reached during normal play,
+    #shortline(rgb("#bbb"))the set of positions that are solvable according to de Bruijn's formula (explained in the next section).
   ],
   placement: bottom,
   scope: "parent",

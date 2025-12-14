@@ -59,7 +59,7 @@ preprocessing step is not that relevant.
 Another way to improve the accuracy of a bloom filter, beyond increasing the size of the filter, is to store fewer
 elements in the filter.
 
-The peg solitaire is four-fold rotationally symmetric, as well as reflection symmetric. This also applies to the end
+The peg solitaire board is four-fold rotationally symmetric, as well as reflection symmetric. This also applies to the end
 position. Therefore, if we know that a given position is solvable, then we also know that any rotation or mirroring of
 that position is solvable.
 
@@ -118,20 +118,15 @@ $A$ and $B$ that both map a position $P$ to $GF4$. Since $GF4$ has four elements
 can take on $4 times 4 = 16$ values.
 
 $
-A(P) = sum_((k,l) in P) p^(k + l),
+A(P) &= sum_((k,l) in P) p^(k + l) \
+B(P) &= sum_((k,l) in P) p^(k - l)
 $
 
-where we say that $(k,l) in P$ if $k$ and $l$ are natural numbers that represent the coordinates of a peg present in
-position $P$ such that the centre hole has coordinates (0, 0).
+We say that $(k,l) in P$ if $k$ and $l$ are natural numbers that represent the coordinates of a peg present in
+position $P$, such that the centre hole has coordinates (0, 0).
 
-Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$, i.e., we use $p$ to denote one of the
-elements that are neither the additive nor multiplicative identity.
-
-The function $B$ takes almost the same form:
-
-$
-B(P) = sum_((k,l) in P) p^(k - l)
-$
+Note that we follow de Bruijn's notation for the elements of $GF4$: $0, 1, p, q$. In other words, we use $p$ and $q$ to
+denote the two elements that are neither the additive nor multiplicative identity.
 
 We summarize the proof from de Bruijn's paper here in a slightly compressed form for the reader's convenience.
 

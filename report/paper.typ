@@ -1,10 +1,10 @@
 #import "template/jacow.typ": jacow
 
-#set page(foreground: rotate(34deg,
-  text(68pt, fill: rgb("22222231"))[
-    *Work In Progress*
-  ]
-))
+// #set page(foreground: rotate(34deg,
+//   text(68pt, fill: rgb("22222231"))[
+//     *Work In Progress*
+//   ]
+// ))
 
 #show: jacow.with(
   title: [Precomputing Peg Solitaire],
@@ -17,12 +17,14 @@
     not be the case on a mobile web browser. Therefore, we optimize a WASM-compatible solver not just
     for runtime, but also RAM usage and total download size.
 
-    Furthermore, we show how a method to compute a sequence of moves from a given position to the normal end position
-    can be trivially extended to also compute a sequence of moves from the normal start position to the end position
-    while forcing the sequence to pass through a desired intermediate position. This is achieved by exploiting a combination
-    of symmetries in the game.
+    Furthermore, we show how any given method to compute a sequence of moves
+    from a given position to the normal end position can easily be extended to
+    also solve the "via" problem: computing a sequence of moves from the start
+    to the end position, while forcing the sequence to pass through a desired
+    intermediate position. This is achieved by exploiting a combination of
+    symmetries in the game.
   ],
-  date: [#datetime.today().display("[month repr:long] [year]")],
+  date: [December 2025],
 )
 
 #place(footnote(numbering: it => "", [
@@ -35,6 +37,7 @@
 #include "section_solver.typ"
 #include "section_eval.typ"
 #include "section_intermediate.typ"
+#pagebreak()
 #include "section_pseudocode.typ"
 #include "section_related.typ"
 #include "section_future.typ"
@@ -47,6 +50,6 @@
   bottom,
   scope: "parent",
   float: true,
-  clearance: 70pt, // TODO: increase clearance for manual column balancing
+  clearance: 559pt, // TODO: increase clearance for manual column balancing
   []
 )

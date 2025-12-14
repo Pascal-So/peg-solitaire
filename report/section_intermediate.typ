@@ -4,11 +4,17 @@
 
 = Forcing Intermediate Positions
 
-The usual goal of Peg Solitaire is to find a path from the start position to the end position. Players might also be
+The usual goal of peg solitaire is to find a path from the start position to the end position. Players might also be
 interested in whether some intermediate position can reach the end position, or if they're stuck and should start again.
 Both of these questions can be answered by the method described so far.
 
-Players might also wonder whether there exists a solution path that goes via a specific intermediate position $P$ chosen by the player. We'll refer to this as the intermediate-position-problem. If $P$ is known beforehand, then we could simply precompute another bloom filter of all positions that can reach $P$, as opposed to all positions that reach the end position as we have done so far. On the client we then separate the solver into two steps, first computing a path from the start to $P$, and then combining that with a path from $P$ to the end.
+Players might also wonder whether there exists a solution path that goes via a
+specific intermediate position $P$ chosen by the player.
+We'll refer to this as the "via" problem. If $P$ is known beforehand, then we
+could simply precompute another bloom filter of all positions that can reach
+$P$, as opposed to all positions that reach the end position as we have done so far.
+On the client we then separate the solver into two steps, first computing a path
+from the start to $P$, and then combining that with a path from $P$ to the end.
 
 This method has two downsides however:
 
@@ -47,16 +53,16 @@ unchanged if all particles in the universe were to be replaced with their antipa
 universe was mirrored (parity transformation) and time was reversed @sozzi_parity_2007. Note that all three
 transformations must be applied together, the symmetry does not hold for a subset of them.
 
-By gratuitous abuse of terminology, we now apply this same concept of discrete symmetries to Peg Solitaire.
+By gratuitous abuse of terminology, we now apply this same concept of discrete symmetries to peg solitaire.
 
 === Parity Transformation
-If we record a game and mirror one coordinate, the resulting recording still behaves exactly like a normal game of Peg
-Solitaire. This is exactly the property that we used in the #link(<sec:mirroring>)[section on the mirroring optimization].
+If we record a game and mirror one coordinate, the resulting recording still behaves exactly like a normal game of peg
+solitaire. This is exactly the property that we used in the #link(<sec:mirroring>)[section on the mirroring optimization].
 #footnote([Rotation is another discrete symmetry in peg solitaire, whereas in the real universe it is continuous.])
-We therefore say that P symmetry holds in Peg Solitaire.
+We therefore say that P symmetry holds in peg solitaire.
 
 === Time Reversal
-To play a game of Peg Solitaire backwards in time is clearly not the same as playing it forwards, thus T symmetry does
+To play a game of peg solitaire backwards in time is clearly not the same as playing it forwards, thus T symmetry does
 not hold by itself.
 
 === Charge Conjugation
@@ -74,7 +80,7 @@ both transformations turn this into a change from one to two pegs.
 #figure(
   placement: auto,
   caption: [
-    Commutative diagram demonstrating CT symmetry for one single Peg Solitaire move. Note that the top left and bottom
+    Commutative diagram demonstrating CT symmetry for one single peg solitaire move. Note that the top left and bottom
     right moves are equivalent. $C$ denotes a charge conjugation, flipping all hole states. $T$ denotes a time reversal.
   ],
   cetz.canvas(length: 0.35cm, {
@@ -147,11 +153,15 @@ $
 
 where $inv(P)$ denotes the inverse of position $P$ as defined in the #link(<sec:charge-conjugation>)["Charge Conjugation" section].
 
-We thus say that CT symmetry holds in Peg Solitaire.
+We thus say that CT symmetry holds in peg solitaire.
 
 == Intermediate Position Solver
 
-Using this fact, we can now come up with a method to solve the intermediate-position-problem. Finding a path that goes via position $P$ can be broken down into the subtasks of finding a path from the start $S$ to $P$ and from $P$ to the end $E$. If there exists a path for both segments, then we can combine them to form the overall path.
+Using this fact, we can now come up with a method to solve the "via" problem.
+Finding a path that goes via position $P$ can be broken down into the subtasks
+of finding a path from the start $S$ to $P$ and from $P$ to the end $E$.
+If there exists a path for both segments, then we can combine them to form the
+overall path.
 
 $
 S arrow dots.h.c arrow P arrow dots.h.c arrow E
@@ -181,5 +191,5 @@ $
 If $"solve"(inv(P), E)$ does not find a sequence, then we know that $P$ is not reachable from the start. If it does find
 a sequence, then we only have to reverse that sequence to get the path from the start to $P$. For our implementation
 this means that we can reuse the same bloom filter for both segments, thus achieving our goal of keeping the download
-size low and allowing $P$ to be chosen at runtime, after all precomputations have finished.
+size low and allowing $P$ to be chosen at runtime, after all precompute steps have been completed.
 
