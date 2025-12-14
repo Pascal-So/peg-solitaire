@@ -13,7 +13,11 @@ use yew_hooks::prelude::*;
 use crate::components::board::Board;
 use crate::game_state::{GameAction, GameState, Mode, Solvability};
 
-const BLOOM_FILTER_URL: Option<&'static str> = option_env!("BLOOM_FILTER_URL");
+/// URL where the bloom filter .bin file will be downloaded from at runtime.
+const BLOOM_FILTER_URL: &'static str = match option_env!("BLOOM_FILTER_URL") {
+    Some(url) => url,
+    None => "filter_502115651_1_norm.bin",
+};
 
 #[derive(Eq)]
 enum BloomFilterResource {
@@ -179,8 +183,7 @@ fn App() -> Html {
             let game_state = game_state.clone();
             bloom_filter.set(BloomFilterResource::Loading);
             wasm_bindgen_futures::spawn_local(async move {
-                let url = BLOOM_FILTER_URL.unwrap_or("/filter_173378771_1_norm.bin");
-                let response = Request::get(url).send().await.unwrap();
+                let response = Request::get(BLOOM_FILTER_URL).send().await.unwrap();
 
                 let body = response.binary().await.unwrap();
                 let filter = Rc::new(BloomFilter::load_from_slice(&body));

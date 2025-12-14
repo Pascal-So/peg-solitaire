@@ -1,32 +1,31 @@
 set dotenv-load
 
 local-server-port := "8081"
-bloom-filter := "502115651"
+bloom-filter := "502115651" # 268435456
 bloom-filter-filename := "filter_" + bloom-filter + "_1_norm.bin"
+bloom-filter-url := "bloom-filters" / bloom-filter-filename
+
 server-path := env("SERVER_PATH")
 
 
-[parallel]
-dev: serve-filters dev-frontend
-
 # Run the frontend in development mode on localhost
 [working-directory: 'frontend']
-dev-frontend:
-    BLOOM_FILTER_URL="http://localhost:{{ local-server-port }}/{{ bloom-filter-filename }}" trunk serve --release
-
-# Serve the bloom filters on localhost
-[working-directory: 'precompute/filters/modulo']
-serve-filters:
-    npx http-server -p {{ local-server-port }} --cors
+dev:
+    BLOOM_FILTER_URL="{{ bloom-filter-url }}" trunk serve --release
 
 [working-directory: 'frontend']
 build-frontend:
-    BLOOM_FILTER_URL="{{ bloom-filter-filename }}" trunk --config ./Trunk.deploy.toml build --release --dist ./dist
+    BLOOM_FILTER_URL="{{ bloom-filter-url }}" trunk --config ./Trunk.deploy.toml build --release --dist ./dist
 
 [working-directory: 'report']
 build-report:
     typst compile paper.typ
 
+[working-directory: 'report']
+watch-report:
+    typst watch paper.typ
+
+[working-directory: 'frontend/bloom-filters']
 compress-filter:
     gzip -k -9 {{ bloom-filter-filename }}
     brotli -k -Z {{ bloom-filter-filename }}
@@ -36,7 +35,6 @@ deploy: build-frontend build-report
     @echo "deploying to {{ server-path }}"
     rsync -avzi ./frontend/dist/ "{{ server-path }}"
     scp ./report/paper.pdf "{{ server-path / "precomputing-pegsolitaire-paper.pdf" }}"
-    rsync -avzi ./precompute/filters/modulo/{{ bloom-filter-filename }}* "{{ server-path }}"
     rsync -avzi .htaccess "{{ server-path }}"
 
 test:

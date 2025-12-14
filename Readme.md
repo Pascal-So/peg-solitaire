@@ -44,3 +44,13 @@ just test # runs unit tests
 
 just deploy # builds the application and uploads it to the webserver
 ```
+
+If you're just trying to get the application to work locally in dev mode, without
+having to build the bloom filters yourself, you can download the precomputed
+version from the server:
+
+```bash
+cd frontend/bloom-filters/
+wget "https://projects.pascalsommer.ch/pegsolitaire/bloom-filters/filter_502115651_1_norm.bin"
+just dev
+```
