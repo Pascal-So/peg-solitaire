@@ -1,6 +1,8 @@
 #import "@preview/cetz:0.4.1"
 
-#import "utils.typ": board, theorem, proof
+#import "utils.typ": board, theorem, proof, thmrules
+
+#show: thmrules.with(qed-symbol: $square$)
 
 = Solver
 

@@ -86,10 +86,10 @@
   "Theorem",
   base: none,
   titlefmt: strong,
-  inset: (top: 0em, left: thm-padding, right: thm-padding),
+  inset: (top: 1.5em, left: thm-padding, right: thm-padding),
 )
 #let proof = thmproof(
   "proof",
   "Proof",
-  inset: (top: 0em, left: thm-padding, right: thm-padding),
+  inset: (top: 1em, bottom: 1.5em, left: thm-padding, right: thm-padding),
 )
