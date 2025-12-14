@@ -275,7 +275,7 @@ fn App() -> Html {
                                         }
                                     })}
 
-                                    <TheoryLink/>
+                                    <ExternalLinks/>
                                 </div>
                             }
                         },
@@ -291,7 +291,7 @@ fn App() -> Html {
                                 >
                                     {"activate solver"}
                                 </button>
-                                <TheoryLink/>
+                                <ExternalLinks/>
                             </div>
                         },
                     }
@@ -301,17 +301,40 @@ fn App() -> Html {
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct ExternalLinkProps {
+    pub text: &'static str,
+    pub link: &'static str,
+}
+
 #[function_component]
-fn TheoryLink() -> Html {
+fn ExternalLink(ExternalLinkProps { text, link }: &ExternalLinkProps) -> Html {
     html! {
-        <a href="https://projects.pascalsommer.ch/pegsolitaire/precomputing-pegsolitaire-paper.pdf" target="_blank">
+        <a href={*link} target="_blank" style="margin-right: 1em">
             <span style="vertical-align: middle">
-                {"read the theory"}
+                {text}
             </span><img
                 src="img/external-link.svg"
                 style="height: 0.4rem; margin: 1px 0 0 2px; vertical-align: middle"
             />
         </a>
+    }
+}
+
+#[function_component]
+fn ExternalLinks() -> Html {
+    html! {
+        <span>
+            <ExternalLink
+                text={"read the theory"}
+                link={"https://projects.pascalsommer.ch/pegsolitaire/precomputing-pegsolitaire-paper.pdf"}
+            />
+
+            <ExternalLink
+                text={"source code"}
+                link={"https://github.com/Pascal-So/peg-solitaire"}
+            />
+        </span>
     }
 }
 
