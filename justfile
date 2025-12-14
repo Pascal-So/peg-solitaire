@@ -31,6 +31,7 @@ compress-filter:
     gzip -k -9 {{ bloom-filter-filename }}
     brotli -k -Z {{ bloom-filter-filename }}
 
+# Build the application and upload it to the webserver
 deploy: build-frontend build-report
     @echo "deploying to {{ server-path }}"
     rsync -avzi ./frontend/dist/ "{{ server-path }}"
