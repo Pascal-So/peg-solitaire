@@ -476,11 +476,4 @@ mod tests {
         assert_eq!(game_state().nr_pegs(), 32);
         assert_eq!(game_state_after_one_move().nr_pegs(), 31);
     }
-
-    #[test]
-    fn undo_and_redo_keeps_solve_path_intact() {
-        let gs = game_state();
-
-        // todo
-    }
 }
