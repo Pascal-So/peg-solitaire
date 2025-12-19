@@ -1,6 +1,6 @@
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, anyhow};
 use common::coord::Coord;
-use common::{Direction, NR_HOLES, Position};
+use common::{Direction, Move, NR_HOLES, Position};
 
 use crate::game_state::permutation::Permutation;
 
@@ -38,10 +38,10 @@ impl Arrangement {
     /// Perform a move from the given source to the destination coordinate.
     ///
     /// This method works for both forwards and backwards moves.
-    pub fn perform_move(&mut self, src: Coord, dst: Coord, dir: Direction) -> anyhow::Result<()> {
-        let Some(middle) = get_move_middle(src, dst) else {
-            bail!("Cannot move between {src} and {dst} since they're not 2 apart.");
-        };
+    pub fn perform_move(&mut self, mv: Move, dir: Direction) -> anyhow::Result<()> {
+        let src = mv.source();
+        let dst = mv.destination();
+        let middle = mv.middle();
 
         let src_hole_idx = src.hole_idx();
         let dst_hole_idx = dst.hole_idx();
@@ -107,20 +107,6 @@ impl Arrangement {
     }
 }
 
-/// If src and dst are exactly 2 apart in an axis aligned direction, get the
-/// coordinate of the hole between them.
-fn get_move_middle(src: Coord, dst: Coord) -> Option<Coord> {
-    let (dx, dy) = dst - src;
-    if !(dx.abs() == 2 && dy == 0 || dx == 0 && dy.abs() == 2) {
-        return None;
-    }
-    let mid = src
-        .shift(dx / 2, dy / 2)
-        .expect("center between valid positions should be valid");
-
-    Some(mid)
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Peg {
     pub coord: Coord,
@@ -139,12 +125,8 @@ mod tests {
         a.toggle_hole(Coord::new(1, 0).unwrap());
         // we now have a "__x" situation starting from the centre
 
-        a.perform_move(
-            Coord::center(),
-            Coord::new(2, 0).unwrap(),
-            Direction::Backward,
-        )
-        .unwrap();
+        a.perform_move(Move::from_raw_coords((0, 0), (2, 0)), Direction::Backward)
+            .unwrap();
 
         let expected = Position::from_ascii([
             "    ###    ",
@@ -164,12 +146,8 @@ mod tests {
         let mut a = Arrangement::new();
 
         assert_eq!(a.nr_pegs(), 32);
-        a.perform_move(
-            Coord::new(2, 0).unwrap(),
-            Coord::center(),
-            Direction::Forward,
-        )
-        .unwrap();
+        a.perform_move(Move::from_raw_coords((2, 0), (0, 0)), Direction::Forward)
+            .unwrap();
         assert_eq!(a.nr_pegs(), 31);
     }
 

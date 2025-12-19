@@ -1,8 +1,6 @@
 use common::{
-    BloomFilter, Direction, NR_PEGS, Position, SolveResult, coord::Coord, solve_with_bloom_filter,
+    BloomFilter, Direction, Move, NR_PEGS, Position, SolveResult, solve_with_bloom_filter,
 };
-
-use crate::game_state::game_state::Move;
 
 /// Store the path to solve the current position.
 ///
@@ -156,22 +154,14 @@ impl SolvePath {
         assert_eq!(pos.count() as usize, self.current_nr_pegs);
 
         if self.forward == Solvability::Unknown {
-            log::info!("recomputint forward");
-            println!("recomputint forward");
             let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Forward, 0).0;
 
             match solve_result {
-                SolveResult::Solved(jumps) => {
-                    log::info!("solved");
-                    println!("solved");
+                SolveResult::Solved(moves) => {
                     match self.get_index_in_direction(Direction::Forward) {
                         Some(idx) => {
                             let slice = &mut self.path[idx..];
-                            assert_eq!(slice.len(), jumps.len());
-                            for (mv, jump) in slice.iter_mut().zip(jumps.into_iter()) {
-                                mv.src = jump.src;
-                                mv.dst = jump.dst;
-                            }
+                            slice.copy_from_slice(&moves);
                         }
                         None => {
                             log::warn!(
@@ -182,30 +172,21 @@ impl SolvePath {
                     self.forward = self.get_solvability_in_direction(Direction::Forward);
                 }
                 SolveResult::Unsolvable => {
-                    log::info!("unsolvable");
-                    println!("unsolvable");
                     self.forward = Solvability::Unsolvable;
                 }
                 SolveResult::TimedOut => {}
             }
         }
         if self.backward == Solvability::Unknown {
-            log::info!("recomputint backward");
-            println!("recomputint backward");
             let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Backward, 0).0;
 
             match solve_result {
-                SolveResult::Solved(jumps) => {
-                    log::info!("solved");
-                    println!("solved");
+                SolveResult::Solved(mut moves) => {
                     match self.get_index_in_direction(Direction::Backward) {
                         Some(idx) => {
                             let slice = &mut self.path[..=idx];
-                            assert_eq!(slice.len(), jumps.len());
-                            for (mv, jump) in slice.iter_mut().zip(jumps.into_iter().rev()) {
-                                mv.src = jump.src;
-                                mv.dst = jump.dst;
-                            }
+                            moves.reverse();
+                            slice.copy_from_slice(&moves);
                         }
                         None => {
                             log::warn!(
@@ -216,8 +197,6 @@ impl SolvePath {
                     self.backward = self.get_solvability_in_direction(Direction::Backward);
                 }
                 SolveResult::Unsolvable => {
-                    log::info!("unsolvable");
-                    println!("unsolvable");
                     self.backward = Solvability::Unsolvable;
                 }
                 SolveResult::TimedOut => {}
@@ -227,48 +206,39 @@ impl SolvePath {
 }
 
 /// The solve path that passes via the heart shape
-const DEFAULT_SOLVE_PATH: [Move; NR_PEGS - 1] = {
-    const fn c(x: i8, y: i8) -> Coord {
-        Coord::new(x, y).unwrap()
-    }
-    const fn mv(s: Coord, d: Coord) -> Move {
-        Move { src: s, dst: d }
-    }
-
-    [
-        mv(c(0, -2), c(0, 0)),
-        mv(c(-2, -1), c(0, -1)),
-        mv(c(-1, -3), c(-1, -1)),
-        mv(c(-1, 0), c(-1, -2)),
-        mv(c(1, -3), c(-1, -3)),
-        mv(c(-1, -3), c(-1, -1)),
-        mv(c(-1, 2), c(-1, 0)),
-        mv(c(-3, 1), c(-1, 1)),
-        mv(c(0, 1), c(-2, 1)),
-        mv(c(-3, -1), c(-3, 1)),
-        mv(c(-3, 1), c(-1, 1)),
-        mv(c(2, 1), c(0, 1)),
-        mv(c(1, 3), c(1, 1)),
-        mv(c(1, 0), c(1, 2)),
-        mv(c(-1, 3), c(1, 3)),
-        mv(c(1, 3), c(1, 1)),
-        mv(c(1, -2), c(1, 0)),
-        mv(c(3, -1), c(1, -1)),
-        mv(c(0, -1), c(2, -1)),
-        mv(c(3, 1), c(3, -1)),
-        mv(c(3, -1), c(1, -1)),
-        mv(c(0, 1), c(2, 1)),
-        mv(c(2, 1), c(2, -1)),
-        mv(c(2, -1), c(0, -1)),
-        mv(c(0, -1), c(-2, -1)),
-        mv(c(-2, -1), c(-2, 1)),
-        mv(c(-2, 1), c(0, 1)),
-        mv(c(0, 0), c(-2, 0)),
-        mv(c(0, 2), c(0, 0)),
-        mv(c(1, 0), c(-1, 0)),
-        mv(c(-2, 0), c(0, 0)),
-    ]
-};
+const DEFAULT_SOLVE_PATH: [Move; NR_PEGS - 1] = [
+    Move::from_raw_coords((0, -2), (0, 0)),
+    Move::from_raw_coords((-2, -1), (0, -1)),
+    Move::from_raw_coords((-1, -3), (-1, -1)),
+    Move::from_raw_coords((-1, 0), (-1, -2)),
+    Move::from_raw_coords((1, -3), (-1, -3)),
+    Move::from_raw_coords((-1, -3), (-1, -1)),
+    Move::from_raw_coords((-1, 2), (-1, 0)),
+    Move::from_raw_coords((-3, 1), (-1, 1)),
+    Move::from_raw_coords((0, 1), (-2, 1)),
+    Move::from_raw_coords((-3, -1), (-3, 1)),
+    Move::from_raw_coords((-3, 1), (-1, 1)),
+    Move::from_raw_coords((2, 1), (0, 1)),
+    Move::from_raw_coords((1, 3), (1, 1)),
+    Move::from_raw_coords((1, 0), (1, 2)),
+    Move::from_raw_coords((-1, 3), (1, 3)),
+    Move::from_raw_coords((1, 3), (1, 1)),
+    Move::from_raw_coords((1, -2), (1, 0)),
+    Move::from_raw_coords((3, -1), (1, -1)),
+    Move::from_raw_coords((0, -1), (2, -1)),
+    Move::from_raw_coords((3, 1), (3, -1)),
+    Move::from_raw_coords((3, -1), (1, -1)),
+    Move::from_raw_coords((0, 1), (2, 1)),
+    Move::from_raw_coords((2, 1), (2, -1)),
+    Move::from_raw_coords((2, -1), (0, -1)),
+    Move::from_raw_coords((0, -1), (-2, -1)),
+    Move::from_raw_coords((-2, -1), (-2, 1)),
+    Move::from_raw_coords((-2, 1), (0, 1)),
+    Move::from_raw_coords((0, 0), (-2, 0)),
+    Move::from_raw_coords((0, 2), (0, 0)),
+    Move::from_raw_coords((1, 0), (-1, 0)),
+    Move::from_raw_coords((-2, 0), (0, 0)),
+];
 
 /// Is the current position solvable, i.e. does a path exist
 /// from the current positon to the end?
@@ -300,17 +270,14 @@ impl Solvability {
 
 #[cfg(test)]
 mod tests {
-    use common::Jump;
+    use common::Move;
 
     use super::*;
     #[test]
     fn test_forwards_backwards_move_preserves_solution_path() {
         let mut solve_path = SolvePath::new(Position::default_start());
 
-        let mv = Move {
-            src: Coord::new(0, -2).unwrap(),
-            dst: Coord::center(),
-        };
+        let mv = Move::from_raw_coords((0, -2), (0, 0));
         solve_path.apply_move(mv, Direction::Forward);
         assert!(matches!(
             solve_path.next_move(Direction::Forward),
@@ -335,12 +302,8 @@ mod tests {
     fn test_moving_off_path_invalidates_cached_path() {
         let mut solve_path = SolvePath::new(Position::default_start());
 
-        let other_mv = Move {
-            src: Coord::new(2, 0).unwrap(),
-            dst: Coord::center(),
-        };
-
-        solve_path.apply_move(other_mv, Direction::Forward);
+        let second_move = Move::from_raw_coords((2, 0), (0, 0));
+        solve_path.apply_move(second_move, Direction::Forward);
 
         assert_eq!(
             solve_path.next_move(Direction::Forward),
@@ -351,7 +314,7 @@ mod tests {
         // came from.
         assert_eq!(
             solve_path.next_move(Direction::Backward),
-            Solvability::Solvable(other_mv)
+            Solvability::Solvable(second_move)
         );
     }
 
@@ -367,10 +330,7 @@ mod tests {
             "    ###    ",
         ]);
         let mut solve_path = SolvePath::new(pos);
-        let mv = Move {
-            src: Coord::new(-1, -1).unwrap(),
-            dst: Coord::new(1, -1).unwrap(),
-        };
+        let mv = Move::from_raw_coords((-1, -1), (1, -1));
 
         solve_path.apply_move(mv, Direction::Backward);
         assert_eq!(solve_path.forward, Solvability::Unknown);
@@ -398,15 +358,9 @@ mod tests {
         assert_eq!(solve_path.forward, Solvability::Unsolvable);
 
         // Then move one step forwards.
-        let mv = Move {
-            src: Coord::new(1, 1).unwrap(),
-            dst: Coord::new(1, -1).unwrap(),
-        };
+        let mv = Move::from_raw_coords((1, 1), (1, -1));
         solve_path.apply_move(mv, Direction::Forward);
-        solve_path.recompute(
-            &bf,
-            pos.apply_jump(Jump::from_coordinate_pair(mv.src, mv.dst).unwrap()),
-        );
+        solve_path.recompute(&bf, pos.apply_move(mv));
         assert_eq!(solve_path.forward, Solvability::Unsolvable);
 
         // Then move back again. Note that we don't recompute the forwards

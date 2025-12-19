@@ -9,7 +9,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
 use common::{
-    BloomFilter, Jump, Position, all_jumps, debruijn::de_bruijn_solvable, solve_with_bloom_filter,
+    BloomFilter, Move, Position, all_moves, debruijn::de_bruijn_solvable, solve_with_bloom_filter,
 };
 use precompute::VisitMap;
 
@@ -182,17 +182,17 @@ fn build_solvability_map() -> VisitMap {
     let mut solvability_map = VisitMap::new();
     let mut total_visited: u64 = 0;
 
-    fn step(visit_map: &mut VisitMap, pos: Position, total_visited: &mut u64, jumps: &[Jump; 76]) {
-        for &jump in jumps {
-            if pos.can_jump_inverse(jump) {
-                let next = pos.apply_jump_inverse(jump);
+    fn step(visit_map: &mut VisitMap, pos: Position, total_visited: &mut u64, moves: &[Move; 76]) {
+        for &mv in moves {
+            if pos.can_move_inverse(mv) {
+                let next = pos.apply_move_inverse(mv);
                 if visit_map.is_visited(next) {
                     continue;
                 }
                 visit_map.visit(next);
                 *total_visited += 1;
                 if next.count() < Position::default_start().count() {
-                    step(visit_map, next, total_visited, jumps);
+                    step(visit_map, next, total_visited, moves);
                 }
             }
         }
@@ -206,7 +206,7 @@ fn build_solvability_map() -> VisitMap {
         &mut solvability_map,
         start,
         &mut total_visited,
-        &all_jumps(),
+        &all_moves(),
     );
 
     println!("Built solvability map. Total solvable positions: {total_visited}");
@@ -236,7 +236,7 @@ fn build_one_past_solvable_map(solvability_map: &VisitMap) -> VisitMap {
 
     let mut one_past_map = VisitMap::new();
 
-    let jumps = all_jumps();
+    let moves = all_moves();
 
     for (pos, b) in solvability_map.iter().enumerate() {
         if !b {
@@ -248,9 +248,9 @@ fn build_one_past_solvable_map(solvability_map: &VisitMap) -> VisitMap {
             continue;
         }
 
-        for jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
+        for mv in moves {
+            if pos.can_move(mv) {
+                let next = pos.apply_move(mv);
                 one_past_map.visit(next);
             }
         }
@@ -459,10 +459,10 @@ fn build_data_and_perform_false_positive_evaluation_for_primes_with_k() {
 fn count_positive_children(filter: &BloomFilter, pos: Position) -> (u64, u64) {
     let mut positives = 0;
     let mut total = 0;
-    for jump in all_jumps() {
-        if pos.can_jump(jump) {
+    for mv in all_moves() {
+        if pos.can_move(mv) {
             total += 1;
-            let next = pos.apply_jump(jump);
+            let next = pos.apply_move(mv);
             if filter.query(next.normalize()) {
                 positives += 1;
             }

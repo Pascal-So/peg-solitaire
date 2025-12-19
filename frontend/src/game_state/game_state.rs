@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use common::{BloomFilter, Direction, NR_HOLES, Position, coord::Coord};
+use common::{BloomFilter, Direction, Move, NR_HOLES, Position, coord::Coord};
 use yew::Reducible;
 
 use crate::game_state::{
@@ -144,19 +144,17 @@ impl Reducible for GameState {
                         }
 
                         // Clicked an empty hole, try to peform a move
+
+                        let Some(mv) = Move::from_coords(selected_coord, coord) else {
+                            // The selected coordinates are not two holes apart.
+                            return self;
+                        };
+
                         let mut state = (*self).clone();
-                        match state.arrangement.perform_move(
-                            selected_coord,
-                            coord,
-                            Direction::Forward,
-                        ) {
+                        match state.arrangement.perform_move(mv, Direction::Forward) {
                             Ok(_) => {
                                 // successfully made a move
                                 state.has_made_first_move = true;
-                                let mv = Move {
-                                    src: selected_coord,
-                                    dst: coord,
-                                };
                                 state
                                     .history
                                     .push(HistoryEntry::Move(mv, Direction::Forward));
@@ -222,10 +220,7 @@ impl Reducible for GameState {
                     }
                     HistoryEntry::Move(mv, dir) => {
                         state.redo.push(HistoryEntry::Move(mv, dir));
-                        state
-                            .arrangement
-                            .perform_move(mv.src, mv.dst, !dir)
-                            .unwrap();
+                        state.arrangement.perform_move(mv, !dir).unwrap();
                         state.solve_path.apply_move(mv, !dir);
                         if let Some(bf) = &self.bloom_filter {
                             state.solve_path.recompute(bf, state.as_position());
@@ -255,7 +250,7 @@ impl Reducible for GameState {
                     }
                     HistoryEntry::Move(mv, dir) => {
                         state.history.push(HistoryEntry::Move(mv, dir));
-                        state.arrangement.perform_move(mv.src, mv.dst, dir).unwrap();
+                        state.arrangement.perform_move(mv, dir).unwrap();
                         state.solve_path.apply_move(mv, dir);
                         if let Some(bf) = &self.bloom_filter {
                             state.solve_path.recompute(bf, state.as_position());
@@ -283,7 +278,7 @@ impl Reducible for GameState {
                 if let solver::Solvability::Solvable(mv) = self.solve_path.next_move(dir) {
                     let mut state = (*self).clone();
                     state.history.push(HistoryEntry::Move(mv, dir));
-                    state.arrangement.perform_move(mv.src, mv.dst, dir).unwrap();
+                    state.arrangement.perform_move(mv, dir).unwrap();
                     state.solve_path.apply_move(mv, dir);
                     if let Some(bf) = &self.bloom_filter {
                         state.solve_path.recompute(bf, state.as_position());
@@ -312,13 +307,6 @@ impl Reducible for GameState {
 enum HistoryEntry {
     Edit(Arrangement),
     Move(Move, Direction),
-}
-
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct Move {
-    // todo: unify with `Jump` instead?
-    pub src: Coord,
-    pub dst: Coord,
 }
 
 #[derive(PartialEq, Eq, Copy, Clone)]

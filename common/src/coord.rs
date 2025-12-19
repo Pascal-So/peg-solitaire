@@ -14,7 +14,7 @@ impl Sub for Coord {
     type Output = (i8, i8);
 
     fn sub(self, rhs: Self) -> Self::Output {
-        (self.x - rhs.x, self.y - rhs.y)
+        self.subtract(rhs)
     }
 }
 
@@ -28,19 +28,24 @@ impl Coord {
         Coord { x: 0, y: 0 }
     }
 
-    pub fn hole_idx(self) -> u8 {
+    /// Get the offset from `other` to `self`
+    pub const fn subtract(self, other: Self) -> (i8, i8) {
+        (self.x - other.x, self.y - other.y)
+    }
+
+    pub const fn hole_idx(self) -> u8 {
         let x = self.x + 3;
         let y = self.y + 3;
         let idx = match (y, x) {
             (0..=1, 2..=4) => (x - 2) + y * 3,
             (2..=4, 0..=6) => x + (y - 2) * 7 + 6,
             (5..=6, 2..=4) => (x - 2) + (y - 5) * 3 + 27,
-            _ => unreachable!("invalid coordinates in Coord struct should be impossible"),
+            _ => unreachable!(),
         };
         idx as u8
     }
 
-    pub fn bitmask(self) -> u64 {
+    pub const fn bitmask(self) -> u64 {
         1u64 << self.hole_idx()
     }
 
@@ -51,7 +56,7 @@ impl Coord {
         }
     }
 
-    pub fn shift(self, x: i8, y: i8) -> Option<Coord> {
+    pub const fn shift(self, x: i8, y: i8) -> Option<Coord> {
         Self::new(self.x + x, self.y + y)
     }
 

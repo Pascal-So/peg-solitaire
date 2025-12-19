@@ -26,35 +26,68 @@ pub const NR_HOLES: usize = 33;
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Position(pub u64);
 
+/// One single move, aka jump, where we lift a peg, move it over a middle peg,
+/// place it in a hole, and remove the middle peg.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Jump {
+pub struct Move {
+    /// Bits that are removed in the board bitfield after this move.
     remove_bits: u64,
+    /// Bits that are added in the board bitfield after this move.
     add_bits: u64,
-    pub src: Coord,
-    pub dst: Coord,
+    /// Coordinate where the jumping peg starts.
+    src: Coord,
+    /// Coordinate where the jumping peg ends up after its jump.
+    dst: Coord,
+    /// The coordinate of the jumped peg in the middle.
+    middle: Coord,
 }
 
-impl Jump {
-    pub fn from_coordinate_pair(src: Coord, dst: Coord) -> Option<Jump> {
-        let (dx, dy) = dst - src;
+impl Move {
+    pub const fn from_coords(src: Coord, dst: Coord) -> Option<Move> {
+        let (dx, dy) = dst.subtract(src);
         if !matches!((dx.abs(), dy.abs()), (0, 2) | (2, 0)) {
             // coordinates are not axis-aligned and two holes apart
             return None;
         }
 
-        let mid = src
+        let middle = src
             .shift(dx / 2, dy / 2)
             .expect("center between valid positions should be valid");
 
-        let remove_bits = src.bitmask() | mid.bitmask();
+        let remove_bits = src.bitmask() | middle.bitmask();
         let add_bits = dst.bitmask();
 
-        Some(Jump {
+        Some(Move {
             remove_bits,
             add_bits,
             src,
             dst,
+            middle,
         })
+    }
+
+    /// Utility function for manually creating moves, useful in tests.
+    ///
+    /// Panics when coordinates are out of bounds or coordinates are not exactly
+    /// a distance of two apart.
+    pub const fn from_raw_coords((x1, y1): (i8, i8), (x2, y2): (i8, i8)) -> Move {
+        Move::from_coords(Coord::new(x1, y1).unwrap(), Coord::new(x2, y2).unwrap()).unwrap()
+    }
+
+    /// Get the coordinate where the jumping peg starts.
+    pub const fn source(self) -> Coord {
+        self.src
+    }
+
+    /// Get the coordinate where the jumping peg ends up after its jump.
+    pub const fn destination(self) -> Coord {
+        self.dst
+    }
+
+    /// Get the coordinate of the jumped peg in the middle, which will be removed
+    /// after the move.
+    pub const fn middle(self) -> Coord {
+        self.middle
     }
 }
 
@@ -121,22 +154,22 @@ impl Position {
         Self(self.0 ^ ((1u64 << 33) - 1))
     }
 
-    pub fn can_jump(&self, jump: Jump) -> bool {
-        (self.0 & jump.add_bits) == 0 && (self.0 & jump.remove_bits).count_ones() == 2
+    pub fn can_move(&self, mv: Move) -> bool {
+        (self.0 & mv.add_bits) == 0 && (self.0 & mv.remove_bits).count_ones() == 2
     }
-    pub fn can_jump_inverse(&self, jump: Jump) -> bool {
-        (self.0 & jump.remove_bits) == 0 && (self.0 & jump.add_bits) > 0
+    pub fn can_move_inverse(&self, mv: Move) -> bool {
+        (self.0 & mv.remove_bits) == 0 && (self.0 & mv.add_bits) > 0
     }
-    pub fn apply_jump(&self, jump: Jump) -> Position {
+    pub fn apply_move(&self, mv: Move) -> Position {
         let mut next = self.0;
-        next &= !jump.remove_bits;
-        next |= jump.add_bits;
+        next &= !mv.remove_bits;
+        next |= mv.add_bits;
         Position(next)
     }
-    pub fn apply_jump_inverse(&self, jump: Jump) -> Position {
+    pub fn apply_move_inverse(&self, mv: Move) -> Position {
         let mut next = self.0;
-        next |= jump.remove_bits;
-        next &= !jump.add_bits;
+        next |= mv.remove_bits;
+        next &= !mv.add_bits;
         Position(next)
     }
     pub fn rotate(&self) -> Position {
@@ -410,7 +443,7 @@ impl Not for Direction {
 
 #[derive(PartialEq, Eq)]
 pub enum SolveResult {
-    Solved(Vec<Jump>),
+    Solved(Vec<Move>),
     Unsolvable,
     TimedOut,
 }
@@ -444,7 +477,7 @@ pub fn solve_with_bloom_filter(
         filter: &BloomFilter,
         end: Position,
         nr_steps: &mut u32,
-        jumps: &[Jump; 76],
+        moves: &[Move; 76],
         step_limit: u32,
     ) -> SolveResult {
         if *nr_steps > step_limit {
@@ -452,13 +485,13 @@ pub fn solve_with_bloom_filter(
         }
         *nr_steps += 1;
 
-        for &jump in jumps {
-            if pos.can_jump(jump) {
-                let next = pos.apply_jump(jump);
+        for &mv in moves {
+            if pos.can_move(mv) {
+                let next = pos.apply_move(mv);
 
                 // Check if we've reached the end position
                 if next == end {
-                    return SolveResult::Solved(vec![jump]);
+                    return SolveResult::Solved(vec![mv]);
                 }
 
                 // If the next position only has a single peg left somewhere
@@ -471,9 +504,9 @@ pub fn solve_with_bloom_filter(
                     continue;
                 }
 
-                match depth_first_search(next, filter, end, nr_steps, jumps, step_limit) {
+                match depth_first_search(next, filter, end, nr_steps, moves, step_limit) {
                     SolveResult::Solved(mut list) => {
-                        list.push(jump);
+                        list.push(mv);
                         return SolveResult::Solved(list);
                     }
                     SolveResult::Unsolvable => {}
@@ -489,7 +522,7 @@ pub fn solve_with_bloom_filter(
         return (SolveResult::Unsolvable, solve_info);
     }
 
-    let mut jumps = all_jumps();
+    let mut moves = all_moves();
     let mut rng = Pcg64Mcg::seed_from_u64(seed);
 
     if dir == Direction::Backward {
@@ -510,7 +543,7 @@ pub fn solve_with_bloom_filter(
         }
 
         let mut nr_steps = 0;
-        let result = depth_first_search(pos, filter, end, &mut nr_steps, &jumps, step_limit);
+        let result = depth_first_search(pos, filter, end, &mut nr_steps, &moves, step_limit);
         solve_info.nr_steps += nr_steps;
         solve_info.nr_attempts += 1;
 
@@ -523,17 +556,22 @@ pub fn solve_with_bloom_filter(
             SolveResult::TimedOut => {}
         }
 
-        jumps.shuffle(&mut rng);
+        moves.shuffle(&mut rng);
     }
 
     (SolveResult::TimedOut, solve_info)
 }
 
-pub fn all_jumps() -> [Jump; 76] {
-    let mut v = Vec::new();
+/// A list of all possible moves on a peg solitaire board.
+///
+/// This list does not take a current board position into account, therefore
+/// for a given board position only some of these moves will be applicable
+/// in this moment.
+pub fn all_moves() -> [Move; 76] {
+    let mut all = Vec::new();
 
     for direction in 0..4 {
-        let jumps = Coord::all().into_iter().filter_map(|coord| {
+        let moves_in_this_direction = Coord::all().into_iter().filter_map(|coord| {
             let mut coord_a = coord;
             let mut coord_b = coord_a.shift(1, 0)?;
             let mut coord_c = coord_a.shift(2, 0)?;
@@ -546,19 +584,20 @@ pub fn all_jumps() -> [Jump; 76] {
 
             let remove_bits = coord_a.bitmask() | coord_b.bitmask();
             let add_bits = coord_c.bitmask();
-            let j = Jump {
+            let mv = Move {
                 remove_bits,
                 add_bits,
                 src: coord_a,
                 dst: coord_c,
+                middle: coord_b,
             };
-            Some(j)
+            Some(mv)
         });
 
-        v.extend(jumps);
+        all.extend(moves_in_this_direction);
     }
 
-    v.try_into().expect("should find exactly 76 jumps")
+    all.try_into().expect("should find exactly 76 moves")
 }
 
 #[cfg(test)]
@@ -594,12 +633,12 @@ mod tests {
     }
 
     #[test]
-    fn test_jump_list_contains_all_unique_jumps() {
-        let jumps = all_jumps();
+    fn test_move_list_contains_all_unique_moves() {
+        let moves = all_moves();
 
-        for i in 0..jumps.len() {
+        for i in 0..moves.len() {
             for j in 0..i {
-                assert_ne!(jumps[i], jumps[j]);
+                assert_ne!(moves[i], moves[j]);
             }
         }
     }
@@ -731,7 +770,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solver_returns_valid_sequence_of_jumps() {
+    fn test_solver_returns_valid_sequence_of_moves() {
         let filter = BloomFilter::always_true();
 
         let mut pos = Position::from_ascii([
@@ -744,16 +783,16 @@ mod tests {
             "    ...    ",
         ]);
 
-        let SolveResult::Solved(jumps) =
+        let SolveResult::Solved(moves) =
             solve_with_bloom_filter(pos, &filter, Direction::Forward, 0).0
         else {
             panic!("should be solvable");
         };
-        assert_eq!(jumps.len(), 4);
+        assert_eq!(moves.len(), 4);
 
-        for jump in jumps {
-            assert!(pos.can_jump(jump));
-            pos = pos.apply_jump(jump);
+        for mv in moves {
+            assert!(pos.can_move(mv));
+            pos = pos.apply_move(mv);
         }
 
         assert_eq!(pos, Position::default_end());
