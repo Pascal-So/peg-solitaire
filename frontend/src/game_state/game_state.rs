@@ -4,8 +4,9 @@ use common::{BloomFilter, Direction, Move, NR_HOLES, Position, coord::Coord};
 use yew::Reducible;
 
 use crate::game_state::{
+    Solvability,
     arrangement::{Arrangement, Peg},
-    solver::{self, SolvePath},
+    solver::SolvePath,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,19 +92,7 @@ impl GameState {
     }
 
     pub fn is_solvable(&self) -> (Solvability, Solvability) {
-        fn convert(s: solver::Solvability) -> Solvability {
-            match s {
-                solver::Solvability::Solvable(_) => Solvability::Yes,
-                solver::Solvability::Solved => Solvability::Yes,
-                solver::Solvability::Unsolvable => Solvability::No,
-                solver::Solvability::Unknown => Solvability::Maybe,
-            }
-        }
-
-        (
-            convert(self.solve_path.next_move(Direction::Backward)),
-            convert(self.solve_path.next_move(Direction::Forward)),
-        )
+        self.solve_path.is_solvable()
     }
 }
 
@@ -275,7 +264,7 @@ impl Reducible for GameState {
                 state.into()
             }
             (GameAction::StepSolution { dir }, _) => {
-                if let solver::Solvability::Solvable(mv) = self.solve_path.next_move(dir) {
+                if let Some(mv) = self.solve_path.next_move(dir) {
                     let mut state = (*self).clone();
                     state.history.push(HistoryEntry::Move(mv, dir));
                     state.arrangement.perform_move(mv, dir).unwrap();
@@ -307,13 +296,6 @@ impl Reducible for GameState {
 enum HistoryEntry {
     Edit(Arrangement),
     Move(Move, Direction),
-}
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub enum Solvability {
-    Yes,
-    No,
-    Maybe,
 }
 
 #[cfg(test)]

@@ -15,26 +15,31 @@ pub struct SolvePath {
     forward: Solvability,
     backward: Solvability,
 
-    current_nr_pegs: usize,
+    current_nr_pegs: i32,
 }
 
 impl SolvePath {
     /// Construct a new `SolvePath` that starts at the given position
     pub fn new(pos: Position) -> Self {
-        let current_nr_pegs = pos.count() as usize;
         let forward;
         let backward;
 
         if pos == Position::default_start() {
-            forward = Solvability::Solvable(DEFAULT_SOLVE_PATH[0]);
+            forward = Solvability::Solvable;
             backward = Solvability::Solved;
         } else if pos == Position::default_end() {
             forward = Solvability::Solved;
-            backward = Solvability::Solvable(DEFAULT_SOLVE_PATH[NR_PEGS - 2]);
+            backward = Solvability::Solvable;
         } else {
             forward = Solvability::Unknown;
             backward = Solvability::Unknown;
         }
+
+        let current_nr_pegs = pos.count();
+        assert!(
+            (1..=NR_PEGS as i32).contains(&current_nr_pegs),
+            "can't solve completely empty or completely full boards"
+        );
 
         Self {
             path: DEFAULT_SOLVE_PATH,
@@ -44,13 +49,24 @@ impl SolvePath {
         }
     }
 
-    /// Query if the current position is solvable in the given direction, and
-    /// if so, return the next move that should be taken towards solving.
-    pub fn next_move(&self, dir: Direction) -> Solvability {
+    /// If the current position is solvable in the given direction, return the
+    /// next move that should be taken in order to solve the game.
+    pub fn next_move(&self, dir: Direction) -> Option<Move> {
+        let idx = self.get_index_in_direction(dir);
+        let mv = idx.map(|idx| self.path[idx]);
         match dir {
-            Direction::Forward => self.forward,
-            Direction::Backward => self.backward,
+            Direction::Forward => (self.forward == Solvability::Solvable)
+                .then_some(mv)
+                .flatten(),
+            Direction::Backward => (self.backward == Solvability::Solvable)
+                .then_some(mv)
+                .flatten(),
         }
+    }
+
+    /// Check if the backwards and forwards directions are solvable
+    pub fn is_solvable(&self) -> (Solvability, Solvability) {
+        (self.backward, self.forward)
     }
 
     /// Apply a move to the current state.
@@ -59,40 +75,43 @@ impl SolvePath {
     /// solver, then the solver can keep the current solve path cached and
     /// doesn't have to recompute anything.
     pub fn apply_move(&mut self, mv: Move, dir: Direction) {
-        match dir {
-            Direction::Forward => {
-                assert!(self.current_nr_pegs > 1);
-                self.current_nr_pegs -= 1;
+        let next_move = self.next_move(dir);
+        self.current_nr_pegs += match dir {
+            Direction::Forward => -1,
+            Direction::Backward => 1,
+        };
+        assert!((1..=NR_PEGS as i32).contains(&self.current_nr_pegs));
 
-                if self.forward == Solvability::Solvable(mv) {
-                    // we moved along the known path
+        if next_move == Some(mv) {
+            // we moved along the known path
+
+            match dir {
+                Direction::Forward => {
                     self.forward = self.get_solvability_in_direction(Direction::Forward);
                     if self.backward.solvable() {
                         self.backward = self.get_solvability_in_direction(Direction::Backward);
                     } else {
                         self.backward = Solvability::Unknown;
                     }
-                } else {
-                    // we left the last computed solve path
-                    self.forward = Solvability::Unknown;
-                    self.backward =
-                        self.append_to_solvability(self.backward, Direction::Backward, mv);
                 }
-            }
-            Direction::Backward => {
-                assert!(self.current_nr_pegs < NR_PEGS);
-                self.current_nr_pegs += 1;
-
-                if self.backward == Solvability::Solvable(mv) {
-                    // we moved along the known backwards path
+                Direction::Backward => {
                     if self.forward.solvable() {
                         self.forward = self.get_solvability_in_direction(Direction::Forward);
                     } else {
                         self.forward = Solvability::Unknown;
                     }
                     self.backward = self.get_solvability_in_direction(Direction::Backward);
-                } else {
-                    // we left the last computed solve path
+                }
+            }
+        } else {
+            // we left the last computed solve path
+            match dir {
+                Direction::Forward => {
+                    self.forward = Solvability::Unknown;
+                    self.backward =
+                        self.append_to_solvability(self.backward, Direction::Backward, mv);
+                }
+                Direction::Backward => {
                     self.forward = self.append_to_solvability(self.forward, Direction::Forward, mv);
                     self.backward = Solvability::Unknown;
                 }
@@ -110,15 +129,14 @@ impl SolvePath {
         dir: Direction,
         mv: Move,
     ) -> Solvability {
-        match solvability {
-            Solvability::Solvable(_) | Solvability::Solved => {
-                let idx = self
-                    .get_index_in_direction(dir)
-                    .expect("we can't be at the end of the solve path because we just did a move");
-                self.path[idx] = mv;
-                Solvability::Solvable(mv)
-            }
-            _ => Solvability::Unknown,
+        if solvability.solvable() {
+            let idx = self
+                .get_index_in_direction(dir)
+                .expect("we can't be at the end of the solve path because we just did a move");
+            self.path[idx] = mv;
+            Solvability::Solvable
+        } else {
+            Solvability::Unknown
         }
     }
 
@@ -126,12 +144,11 @@ impl SolvePath {
     /// are no more moves in this direction because we've already reached
     /// the end.
     fn get_index_in_direction(&self, dir: Direction) -> Option<usize> {
+        let current_nr_pegs = self.current_nr_pegs as usize;
         match dir {
-            Direction::Forward => {
-                (self.current_nr_pegs > 1).then(|| NR_PEGS - self.current_nr_pegs)
-            }
+            Direction::Forward => (current_nr_pegs > 1).then(|| NR_PEGS - current_nr_pegs),
             Direction::Backward => {
-                (self.current_nr_pegs < NR_PEGS).then(|| NR_PEGS - self.current_nr_pegs - 1)
+                (current_nr_pegs < NR_PEGS).then(|| NR_PEGS - current_nr_pegs - 1)
             }
         }
     }
@@ -141,7 +158,7 @@ impl SolvePath {
     /// computed, get the `Solvability`
     fn get_solvability_in_direction(&self, dir: Direction) -> Solvability {
         match self.get_index_in_direction(dir) {
-            Some(idx) => Solvability::Solvable(self.path[idx]),
+            Some(_) => Solvability::Solvable,
             None => Solvability::Solved,
         }
     }
@@ -151,7 +168,7 @@ impl SolvePath {
     /// The given position must correspond to the position that the SolvePath
     /// state is already in.
     pub fn recompute(&mut self, bloom_filter: &BloomFilter, pos: Position) {
-        assert_eq!(pos.count() as usize, self.current_nr_pegs);
+        assert_eq!(pos.count(), self.current_nr_pegs);
 
         if self.forward == Solvability::Unknown {
             let solve_result = solve_with_bloom_filter(pos, bloom_filter, Direction::Forward, 0).0;
@@ -244,9 +261,8 @@ const DEFAULT_SOLVE_PATH: [Move; NR_PEGS - 1] = [
 /// from the current positon to the end?
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Solvability {
-    /// Yes, the position is solvable, and to solve it you should go ahead
-    /// with this following move.
-    Solvable(Move),
+    /// Yes, the position is solvable.
+    Solvable,
     /// Yes, we have already reached the target position.
     Solved,
     /// No, the position is not solvable.
@@ -260,7 +276,7 @@ impl Solvability {
     /// Check if the position is either solvable or already solved.
     pub fn solvable(self) -> bool {
         match self {
-            Solvability::Solvable(_) => true,
+            Solvability::Solvable => true,
             Solvability::Solved => true,
             Solvability::Unsolvable => false,
             Solvability::Unknown => false,
@@ -279,23 +295,12 @@ mod tests {
 
         let mv = Move::from_raw_coords((0, -2), (0, 0));
         solve_path.apply_move(mv, Direction::Forward);
-        assert!(matches!(
-            solve_path.next_move(Direction::Forward),
-            Solvability::Solvable(_),
-        ));
-        assert_eq!(
-            solve_path.next_move(Direction::Backward),
-            Solvability::Solvable(mv),
-        );
+        assert!(matches!(solve_path.next_move(Direction::Forward), Some(_)));
+        assert_eq!(solve_path.next_move(Direction::Backward), Some(mv));
+
         solve_path.apply_move(mv, Direction::Backward);
-        assert_eq!(
-            solve_path.next_move(Direction::Forward),
-            Solvability::Solvable(mv),
-        );
-        assert_eq!(
-            solve_path.next_move(Direction::Backward),
-            Solvability::Solved,
-        );
+        assert_eq!(solve_path.next_move(Direction::Forward), Some(mv));
+        assert_eq!(solve_path.next_move(Direction::Backward), None);
     }
 
     #[test]
@@ -306,16 +311,13 @@ mod tests {
         solve_path.apply_move(second_move, Direction::Forward);
 
         assert_eq!(
-            solve_path.next_move(Direction::Forward),
-            Solvability::Unknown
+            solve_path.is_solvable(),
+            (Solvability::Solvable, Solvability::Unknown)
         );
 
         // Path back to the start should be known because that's where we
         // came from.
-        assert_eq!(
-            solve_path.next_move(Direction::Backward),
-            Solvability::Solvable(second_move)
-        );
+        assert_eq!(solve_path.next_move(Direction::Backward), Some(second_move));
     }
 
     #[test]

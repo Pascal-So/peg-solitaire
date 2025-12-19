@@ -265,9 +265,10 @@ fn App() -> Html {
                                     </div>
 
                                     {for [(forward, "current position", "end"), (backward, "start", "current position")].map(|(solv, src, dst)| {
-                                        let (path, word) = match solv {
-                                            Solvability::Yes => ("img/yes.svg", "a"),
-                                            _ => ("img/no.svg", "no"),
+                                        let (path, word) = if solv.solvable() {
+                                            ("img/yes.svg", "a")
+                                        } else {
+                                            ("img/no.svg", "no")
                                         };
 
                                         html!{
@@ -364,9 +365,9 @@ fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
         callback,
     } = props;
     let (color, borderstyle, clickable) = match solvability {
-        Solvability::Yes => ("#555", "solid", true),
-        Solvability::No => ("#822", "dotted", false),
-        Solvability::Maybe => ("#882", "dashed", false),
+        Solvability::Solvable | Solvability::Solved => ("#555", "solid", true),
+        Solvability::Unsolvable => ("#822", "dotted", false),
+        Solvability::Unknown => ("#882", "dashed", false),
     };
     let outer_margin = 4;
     let inner_margin = if *len > 0 { outer_margin } else { 0 };

@@ -4,4 +4,5 @@ mod permutation;
 mod solver;
 
 pub use arrangement::Peg;
-pub use game_state::{GameAction, GameState, Mode, Solvability};
+pub use game_state::{GameAction, GameState, Mode};
+pub use solver::Solvability;
