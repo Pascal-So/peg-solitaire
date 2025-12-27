@@ -56,6 +56,11 @@ impl GameState {
             bloom_filter: None,
         }
     }
+    /// Set the `has_made_first_move` flag.
+    pub fn with_first_move(mut self, has_made_first_move: bool) -> Self {
+        self.has_made_first_move = has_made_first_move;
+        self
+    }
     pub fn selected_coord(&self) -> Option<Coord> {
         let coord = self.selection?;
         if !self.arrangement.is_occupied(coord) {
@@ -468,6 +473,15 @@ mod tests {
 
         // resetting does not reset first move flag
         let gs = gs.reduce(GameAction::Reset);
+        assert!(gs.has_made_first_move());
+    }
+
+    #[test]
+    fn test_with_first_move() {
+        let gs = GameState::new().with_first_move(false);
+        assert!(!gs.has_made_first_move());
+
+        let gs = GameState::new().with_first_move(true);
         assert!(gs.has_made_first_move());
     }
 

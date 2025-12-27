@@ -25,6 +25,7 @@ enum BloomFilterResource {
     Loaded,
     Loading,
     NotRequested,
+    // todo: some kind of error state?
 }
 
 /// We intentionally broaden the equivalence so that any two bloom filters are
@@ -37,11 +38,22 @@ impl PartialEq for BloomFilterResource {
     }
 }
 
+/// The main application view
 #[function_component]
 fn App() -> Html {
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 
-    let game_state = use_reducer(|| GameState::new());
+    let has_made_first_move = use_local_storage::<bool>("has_made_first_move".to_string());
+    let wants_to_download_solver =
+        use_local_storage::<bool>("wants_to_download_solver".to_string());
+    let game_state = use_reducer({
+        // In local storage we store if the player has ever made a move yet, and
+        // if so, we display the controls right from the start rather than only
+        // showing them once the player again makes their first move in this
+        // current session.
+        let has_made_first_move = has_made_first_move.unwrap_or(false);
+        move || GameState::new().with_first_move(has_made_first_move)
+    });
     let display_scale = use_state(|| 1.0);
     let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
@@ -49,6 +61,20 @@ fn App() -> Html {
     let scroll_target = use_state(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
 
+    use_effect_with((game_state.clone(), has_made_first_move), {
+        move |(game_state, has_made_first_move)| {
+            if !has_made_first_move.unwrap_or(false) && game_state.has_made_first_move() {
+                // Store the fact that the player has now made their first
+                // move in local storage.
+                has_made_first_move.set(true);
+            }
+        }
+    });
+
+    // "Scroll" to a selected game state: If the solver knows a solution path,
+    // then the user can step through the solution manually. But this requires
+    // a lot of clicking, so we allow a "scrolling" effect where the game
+    // automatically plays itself with a given number of steps per second.
     use_effect_with((game_state.clone(), scroll_target.clone()), {
         move |(game_state, scroll_target)| {
             let scroll_target = scroll_target.clone();
@@ -169,20 +195,20 @@ fn App() -> Html {
         })
     };
 
-    let toggle_solver = {
-        let solver_visible = solver_visible.clone();
-        Callback::from(move |_| {
-            solver_visible.set(!*solver_visible);
-        })
-    };
-
     let download_solver = {
         let bloom_filter = bloom_filter.clone();
         let game_state = game_state.clone();
+        let wants_to_download_solver = wants_to_download_solver.clone();
         Callback::from(move |_| {
+            if *bloom_filter != BloomFilterResource::NotRequested {
+                // the download has already been requested
+                return;
+            }
+
             let bloom_filter = bloom_filter.clone();
             let game_state = game_state.clone();
             bloom_filter.set(BloomFilterResource::Loading);
+            wants_to_download_solver.set(true);
             wasm_bindgen_futures::spawn_local(async move {
                 let response = Request::get(BLOOM_FILTER_URL).send().await.unwrap();
 
@@ -191,6 +217,25 @@ fn App() -> Html {
                 bloom_filter.set(BloomFilterResource::Loaded);
                 game_state.dispatch(GameAction::RegisterSolver { solver: filter });
             });
+        })
+    };
+
+    // open/close the solver menu
+    let toggle_solver = {
+        let solver_visible = solver_visible.clone();
+        let download_solver = download_solver.clone();
+        let bloom_filter = bloom_filter.clone();
+        let wants_to_download_solver = wants_to_download_solver.clone();
+        Callback::from(move |_| {
+            if !*solver_visible && *bloom_filter == BloomFilterResource::NotRequested {
+                if wants_to_download_solver.unwrap_or(false) {
+                    // If the user has chosen to download the solver last time,
+                    // then we assume that they also want to download it this
+                    // time once they open the solver menu.
+                    download_solver.emit(())
+                }
+            }
+            solver_visible.set(!*solver_visible);
         })
     };
 
@@ -264,7 +309,7 @@ fn App() -> Html {
                                 <p>{"The solver can compute solution paths directly on your device. To activate the solver, roughly 10MB of data will be loaded once initially."}</p>
                                 <button
                                     style="font-size: inherit; margin-right: 1em"
-                                    onclick={download_solver}
+                                    onclick={move |_| download_solver.emit(())}
                                 >
                                     {"activate solver"}
                                 </button>
