@@ -3,7 +3,7 @@ mod game_state;
 
 use std::rc::Rc;
 
-use common::{BloomFilter, Direction, coord::Coord};
+use common::{BloomFilter, coord::Coord};
 use gloo_net::http::Request;
 use gloo_timers::future::TimeoutFuture;
 use web_sys::HtmlElement;
@@ -11,7 +11,8 @@ use yew::prelude::*;
 use yew_hooks::prelude::*;
 
 use crate::components::board::Board;
-use crate::game_state::{GameAction, GameState, Mode, Solvability};
+use crate::components::timeline::Timeline;
+use crate::game_state::{GameAction, GameState, Mode};
 
 /// URL where the bloom filter .bin file will be downloaded from at runtime.
 const BLOOM_FILTER_URL: &'static str = match option_env!("BLOOM_FILTER_URL") {
@@ -217,52 +218,24 @@ fn App() -> Html {
                     match &*bloom_filter {
                         BloomFilterResource::Loaded => {
                             let (backward, forward) = game_state.is_solvable();
-                            let move_backward = {
+                            let scroll_to = {
+                                let scroll_target = scroll_target.clone();
+                                Callback::from(move |nr_pegs| {
+                                    scroll_target.set(Some(nr_pegs));
+                                })
+                            };
+                            let step = {
                                 let game_state = game_state.clone();
                                 let scroll_target = scroll_target.clone();
-                                Callback::from(move |_| {
+                                Callback::from(move |dir| {
                                     scroll_target.set(None);
-                                    game_state.dispatch(GameAction::StepSolution {dir: Direction::Backward});
-                                })
-                            };
-                            let move_forward = {
-                                let game_state = game_state.clone();
-                                let scroll_target = scroll_target.clone();
-                                Callback::from(move |_| {
-                                    scroll_target.set(None);
-                                    game_state.dispatch(GameAction::StepSolution {dir: Direction::Forward});
-                                })
-                            };
-                            let move_to_start = {
-                                let scroll_target = scroll_target.clone();
-                                Callback::from(move |_| {
-                                    scroll_target.set(Some(32));
-                                })
-                            };
-                            let move_to_end = {
-                                let scroll_target = scroll_target.clone();
-                                Callback::from(move |_| {
-                                    scroll_target.set(Some(1));
+                                    game_state.dispatch(GameAction::StepSolution {dir});
                                 })
                             };
 
                             html!{
                                 <div>
-                                    <div style="display: flex; flex-direction: row; width: 100%; text-align: center; align-items: stretch">
-                                        <span onclick={move_to_start}>{"start"}</span>
-                                        <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
-
-                                            <ProgressBarSegment solvability={backward} len={32 - current_nr_pegs} side={Side::Left} callback={move_backward}/>
-                                            <div style="position: relative; line-height: 0">
-                                                <img src="img/circle.svg"/>
-                                                <span style="position: absolute; top: -6px; left: 0; right: 0; font-size: 0.35rem; text-align: center">
-                                                    {game_state.nr_pegs()}
-                                                </span>
-                                            </div>
-                                            <ProgressBarSegment solvability={forward} len={current_nr_pegs - 1} side={Side::Right} callback={move_forward}/>
-                                        </div>
-                                        <span onclick={move_to_end}>{"end"}</span>
-                                    </div>
+                                    <Timeline nr_pegs={current_nr_pegs} solvability_forward={forward} solvability_backward={backward} scroll_to={scroll_to} step={step} />
 
                                     {for [(forward, "current position", "end"), (backward, "start", "current position")].map(|(solv, src, dst)| {
                                         let (path, word) = if solv.solvable() {
@@ -339,70 +312,6 @@ fn ExternalLinks() -> Html {
                 link={"https://github.com/Pascal-So/peg-solitaire"}
             />
         </span>
-    }
-}
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-enum Side {
-    Left,
-    Right,
-}
-
-#[derive(Properties, Clone, PartialEq)]
-struct ProgressBarSegmentProps {
-    solvability: Solvability,
-    len: i32,
-    side: Side,
-    callback: Callback<i32>,
-}
-
-#[function_component]
-fn ProgressBarSegment(props: &ProgressBarSegmentProps) -> Html {
-    let ProgressBarSegmentProps {
-        solvability,
-        len,
-        side,
-        callback,
-    } = props;
-    let (color, borderstyle, clickable) = match solvability {
-        Solvability::Solvable | Solvability::Solved => ("#555", "solid", true),
-        Solvability::Unsolvable => ("#822", "dotted", false),
-        Solvability::Unknown => ("#882", "dashed", false),
-    };
-    let outer_margin = 4;
-    let inner_margin = if *len > 0 { outer_margin } else { 0 };
-    let margins = match side {
-        Side::Left => format!("0 {inner_margin}px 0 {outer_margin}px"),
-        Side::Right => format!("0 {outer_margin}px 0 {inner_margin}px"),
-    };
-
-    let div_ref = use_node_ref();
-
-    let classes = format!(
-        "progress-bar-segment {}",
-        if clickable { "clickable" } else { "" }
-    );
-
-    let onclick = {
-        let callback = callback.clone();
-        let div_ref = div_ref.clone();
-        let len = *len;
-        Callback::from(move |ev: MouseEvent| {
-            let Some(div) = div_ref.cast::<HtmlElement>() else {
-                return;
-            };
-            let fraction = ev.offset_x() as f64 / div.client_width() as f64;
-            let position = ((fraction * len as f64) as i32).min(len - 1).max(0);
-
-            callback.emit(position);
-        })
-    };
-
-    html! {
-        <div ref={div_ref} class={classes} style={format!("flex-grow: {len}; margin: {margins}")} onclick={onclick}>
-            <div style={format!("border-top-style: {borderstyle}; border-top-color: {color}")}>
-            </div>
-        </div>
     }
 }
 
