@@ -45,7 +45,7 @@ false positives but never false negatives.
 
 This is exactly what we can use for our tree search. We build a bloom filter of all solvable positions, and then during
 the search we only visit positions where the presence check returns "Yes". We will therefore sometimes explore unnecessary
-positions, but we will never abandon a solvable path.
+positions due to false positives, but we will never discard a solvable path.
 
 Bloom filters provide us with a trade-off parameter that we can tune. If we make the bloom filter more accurate, we
 waste less time during tree search, but this increases the storage size of the bloom filter, meaning that we have to
