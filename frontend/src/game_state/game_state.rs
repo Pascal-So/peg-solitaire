@@ -62,11 +62,7 @@ impl GameState {
         self
     }
     pub fn selected_coord(&self) -> Option<Coord> {
-        let coord = self.selection?;
-        if !self.arrangement.is_occupied(coord) {
-            log::warn!("Selected coordinate {coord} is not occupied!");
-        }
-        Some(coord)
+        self.selection
     }
     pub fn as_position(&self) -> Position {
         let mut out = 0;
@@ -98,6 +94,17 @@ impl GameState {
 
     pub fn is_solvable(&self) -> (Solvability, Solvability) {
         self.solve_path.is_solvable()
+    }
+
+    /// Check some properties that should always hold
+    #[cfg(test)]
+    fn validate(&self) {
+        if let Some(coord) = self.selection {
+            assert!(
+                self.arrangement.is_occupied(coord),
+                "selected coordinate {coord} is not occupied"
+            );
+        }
     }
 }
 
@@ -232,6 +239,7 @@ impl Reducible for GameState {
 
                 let mut state = (*self).clone();
                 let entry = state.redo.pop().unwrap();
+                state.selection = None;
 
                 match entry {
                     HistoryEntry::Edit(mut arrangement) => {
@@ -272,11 +280,13 @@ impl Reducible for GameState {
                 if let Some(mv) = self.solve_path.next_move(dir) {
                     let mut state = (*self).clone();
                     state.history.push(HistoryEntry::Move(mv, dir));
+                    state.redo.clear();
                     state.arrangement.perform_move(mv, dir).unwrap();
                     state.solve_path.apply_move(mv, dir);
                     if let Some(bf) = &self.bloom_filter {
                         state.solve_path.recompute(bf, state.as_position());
                     }
+                    state.selection = None;
 
                     state.into()
                 } else {
@@ -305,6 +315,8 @@ enum HistoryEntry {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     fn game_state() -> Rc<GameState> {
@@ -489,5 +501,89 @@ mod tests {
     fn test_nr_pegs() {
         assert_eq!(game_state().nr_pegs(), 32);
         assert_eq!(game_state_after_one_move().nr_pegs(), 31);
+    }
+
+    fn action_sequence(max_len: usize) -> impl Strategy<Value = Vec<GameAction>> {
+        let click_strategy = (-2..=2i8, -2..2i8).prop_filter_map("", |(x, y)| {
+            Some(ClickHole {
+                coord: Coord::new(x, y)?,
+            })
+        });
+
+        let step_strategy = any::<bool>().prop_map(|b| {
+            if b {
+                StepSolution {
+                    dir: Direction::Forward,
+                }
+            } else {
+                StepSolution {
+                    dir: Direction::Backward,
+                }
+            }
+        });
+
+        use GameAction::*;
+        let elem = prop_oneof![
+            Just(GameAction::Reset),
+            Just(Undo),
+            Just(Redo),
+            step_strategy,
+            click_strategy,
+        ];
+        prop::collection::vec(elem, 2..=max_len)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 10000,
+            max_local_rejects: 1000000,
+            .. ProptestConfig::default()
+        })]
+        #[test]
+        fn test_action_sequences(sequence in action_sequence(4)) {
+            let mut gs = game_state();
+            for action in sequence {
+                gs = gs.reduce(action);
+                gs.validate();
+            }
+        }
+    }
+
+    #[test]
+    fn test_sequences_found_by_proptest() {
+        // Add manual tests for these sequences because I don't entirely
+        // trust the proptest regression mechanism to find them again..
+        use Direction::*;
+        use GameAction::*;
+        let sequences = vec![
+            vec![
+                StepSolution { dir: Forward },
+                Undo,
+                StepSolution { dir: Forward },
+                Redo,
+            ],
+            vec![
+                ClickHole {
+                    coord: Coord::new(0, -1).unwrap(),
+                },
+                StepSolution { dir: Forward },
+            ],
+            vec![
+                StepSolution { dir: Forward },
+                Undo,
+                ClickHole {
+                    coord: Coord::new(0, -1).unwrap(),
+                },
+                Redo,
+            ],
+        ];
+
+        for sequence in sequences {
+            let mut gs = game_state();
+            for action in sequence {
+                gs = gs.reduce(action);
+                gs.validate();
+            }
+        }
     }
 }

@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc abe873cc92e43d11be131efa08cfb6f4e12a82a253dd8f09e17d3bd50742ed73 # shrinks to sequence = [StepSolution { dir: Forward }, Undo, ClickHole { coord: Coord { x: 0, y: -1 } }, Redo]
+cc d1ec2f2c155cbe862a32a6faa05d09727de35f8d0d00903930a5067bf61f3023 # shrinks to sequence = [StepSolution { dir: Forward }, Undo, StepSolution { dir: Forward }, Redo]
+cc 4174f3696898f8657dcec03743204886be96bfc631870b08e702b0cc26d4fb07 # shrinks to sequence = [ClickHole { coord: Coord { x: 0, y: -1 } }, StepSolution { dir: Forward }]

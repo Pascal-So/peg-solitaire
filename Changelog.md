@@ -1,6 +1,6 @@
 # Changelog
 
-## unreleased
+## 2025-12-28
 
 ### User Visible
 
@@ -13,6 +13,7 @@
   * add icons
   * make the hit area for clicking larger
   * prevent text selection from interfering with clicking
+* Some bugfixes in the game logic
 
 ### Internal
 
