@@ -2,7 +2,7 @@ use common::{NR_HOLES, coord::Coord};
 use yew::prelude::*;
 use yew_icons::{Icon, IconId};
 
-use crate::game_state::Peg;
+use crate::{components::b2f, game_state::Peg};
 
 const PX_HOLE_DISTANCE: i16 = 34;
 
@@ -137,9 +137,4 @@ pub fn Board(
             }) }
         </div>
     }
-}
-
-/// Convert a bool to a float, which is useful for CSS opacity
-fn b2f(b: bool) -> f32 {
-    if b { 1.0 } else { 0.0 }
 }

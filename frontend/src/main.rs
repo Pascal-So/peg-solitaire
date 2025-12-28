@@ -84,7 +84,7 @@ fn App() -> Html {
             let scroll_command_id = scroll_command_id.clone();
 
             wasm_bindgen_futures::spawn_local(async move {
-                TimeoutFuture::new(80).await;
+                TimeoutFuture::new(90).await;
 
                 if *scroll_command_id.borrow() != current_id {
                     return;
@@ -171,7 +171,7 @@ fn App() -> Html {
                 };
 
                 let div_width = div.client_width() as f64;
-                let div_height = div_width * 1.3;
+                let div_height = div_width * 1.38;
 
                 let new_scale = (window_size.0 / div_width).min(window_size.1 / div_height) * 0.9;
                 display_scale.set(new_scale);

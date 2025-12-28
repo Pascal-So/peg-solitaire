@@ -2,7 +2,7 @@ use common::Direction;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 
-use crate::game_state::Solvability;
+use crate::{components::b2f, game_state::Solvability};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct TimelineProps {
@@ -13,7 +13,9 @@ pub struct TimelineProps {
     pub step: Callback<Direction>,
 }
 
-/// Render the game board with pegs and holes, plus some surrounding buttons.
+/// A progress bar/timeline showing the progression of the game's solution from
+/// the start to end position. The user can scrub through the solution by
+/// clicking on the timeline, kinda like in a video player.
 #[function_component]
 pub fn Timeline(
     TimelineProps {
@@ -42,20 +44,21 @@ pub fn Timeline(
     };
 
     html! {
-        <div style="display: flex; flex-direction: row; width: 100%; text-align: center; align-items: stretch">
-            <span onclick={scroll_to_start}>{"start"}</span>
-            <div style="flex-grow: 1; display: flex; flex-direction: row; align-items: center">
-
+        <div style="display: flex; flex-direction: row; width: 100%; text-align: center; align-items: stretch; user-select: none; margin-bottom: 1em">
+            <TimelineEndpoint solvability={*solvability_backward} side={Side::Left} callback={scroll_to_start} />
+            <div style="flex-grow: 1; display: flex; flex-direction: row">
                 <TimelineSegment solvability={*solvability_backward} len={32 - nr_pegs} side={Side::Left} callback={step_backward}/>
-                <div style="position: relative; line-height: 0">
-                    <img src="img/circle.svg"/>
-                    <span style="position: absolute; top: -6px; left: 0; right: 0; font-size: 0.35rem; text-align: center">
+                <div class="timeline-segment" style="align-items: center">
+                    <span class="timeline-segment-upper" style="font-size: 0.35rem">
                         {nr_pegs}
                     </span>
+                    <div class="timeline-segment-lower">
+                        <img src="img/circle.svg"/>
+                    </div>
                 </div>
                 <TimelineSegment solvability={*solvability_forward} len={nr_pegs - 1} side={Side::Right} callback={step_forward}/>
             </div>
-            <span onclick={scroll_to_end}>{"end"}</span>
+            <TimelineEndpoint solvability={*solvability_forward} side={Side::Right} callback={scroll_to_end} />
         </div>
     }
 }
@@ -99,10 +102,7 @@ fn TimelineSegment(
 
     let div_ref = use_node_ref();
 
-    let classes = format!(
-        "progress-bar-segment {}",
-        if clickable { "clickable" } else { "" }
-    );
+    let classes = classes!("timeline-segment", clickable.then_some("clickable"));
 
     let onclick = {
         let callback = callback.clone();
@@ -119,9 +119,75 @@ fn TimelineSegment(
         })
     };
 
+    let show_arrow = *len > 0 && clickable;
+    let arrow;
+    let arrow_style;
+    match side {
+        Side::Left => {
+            arrow = "img/chevron-left.svg";
+            arrow_style = "justify-content: end";
+        }
+        Side::Right => {
+            arrow = "img/chevron-right.svg";
+            arrow_style = "justify-content: start";
+        }
+    };
+
     html! {
         <div ref={div_ref} class={classes} style={format!("flex-grow: {len}; margin: {margins}")} onclick={onclick}>
-            <div style={format!("border-top-style: {borderstyle}; border-top-color: {color}")}>
+            <div class="timeline-segment-upper" style={arrow_style}>
+                if show_arrow {
+                    <img src={arrow} class="timeline-icon" style="width: 6px" />
+                }
+            </div>
+            <div class="timeline-segment-lower">
+                <div class="timeline-line" style={format!("border-top-style: {borderstyle}; border-top-color: {color}")}>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[derive(Properties, Clone, PartialEq)]
+struct TimelineEndpointProps {
+    solvability: Solvability,
+    side: Side,
+    callback: Callback<()>,
+}
+
+#[function_component]
+fn TimelineEndpoint(
+    TimelineEndpointProps {
+        solvability,
+        side,
+        callback,
+    }: &TimelineEndpointProps,
+) -> Html {
+    let icon;
+    let text;
+    match side {
+        Side::Left => {
+            icon = "img/skip-back.svg";
+            text = "start";
+        }
+        Side::Right => {
+            icon = "img/skip-forward.svg";
+            text = "end";
+        }
+    }
+
+    let solvable = *solvability == Solvability::Solvable;
+    let callback = callback.clone();
+
+    let classes = classes!("timeline-segment", solvable.then_some("clickable"));
+
+    html! {
+        <div style="min-width: 12px; flex: none" class={classes} onclick={move |_| callback.emit(())}>
+            <span class="timeline-segment-upper" style={format!("opacity: {}", b2f(solvable))}>
+                <img src={icon} class="timeline-icon" style="width: 12px" />
+            </span>
+            <div class="timeline-segment-lower">
+                <span style="margin-bottom: 1px">{text}</span>
             </div>
         </div>
     }

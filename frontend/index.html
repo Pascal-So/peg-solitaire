@@ -98,25 +98,59 @@ button {
     border: 2.2px solid #3b603a;
 }
 
-.progress-bar-segment {
-    flex-shrink: 1;
-    flex-basis: auto;
+.timeline-segment {
+    flex: 0;
     transition: all 200ms ease;
-    height: 8px;
+    height: 27px;
+    padding-bottom: 2px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    justify-content: space-between;
 }
-.progress-bar-segment.clickable {
+.timeline-segment.clickable {
     cursor: pointer;
 }
-.progress-bar-segment>div {
+.timeline-segment .timeline-line {
     border-top-width: 1px;
     transition: all 100ms ease;
     height: 0;
     width: 100%;
 }
-.progress-bar-segment.clickable:hover>div {
+.timeline-segment.clickable:hover .timeline-line {
     border-top-width: 4px;
+}
+.timeline-segment-lower {
+    height: 6px;
+    flex: none;
+
+    display: flex;
+    align-items: center;
+
+    color: #ccc;
+
+    transition: color 100ms linear;
+}
+.timeline-segment-upper {
+    height: 16px;
+    flex: none;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    transition: opacity 200ms linear;
+}
+.timeline-segment:hover .timeline-icon {
+    opacity: 100%;
+}
+.timeline-segment.clickable:hover .timeline-segment-lower {
+    color: white;
+}
+.timeline-icon {
+    transition: opacity 100ms linear;
+    opacity: 75%;
+    height: 16px;
+    object-fit: cover;
 }
 
 .solver-box {

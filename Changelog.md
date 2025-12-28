@@ -9,6 +9,10 @@
 * Keep `wants_to_download_solver` in local storage so that the solver download
   starts automatically if the user opens the solver menu and they have already
   downloaded it in a previous session.
+* Solver timeline improvements:
+  * add icons
+  * make the hit area for clicking larger
+  * prevent text selection from interfering with clicking
 
 ### Internal
 
