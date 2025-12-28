@@ -13,9 +13,11 @@
   ),
   paper-size: "a4",
   abstract: [
-    Finding a sequence of moves to solve a Peg Solitaire game is trivial if you have 1GiB of RAM to spare. This might however
-    not be the case on a mobile web browser. Therefore, we optimize a WASM-compatible solver not just
-    for runtime, but also RAM usage and total download size.
+    Finding a sequence of moves to solve a Peg Solitaire game is trivial if you
+    have 1GiB of RAM to spare. This might however not be the case on a mobile
+    web browser.
+    In this work, we thus present a solver based on bloom filters which is optimized
+    for low RAM usage and download size.
 
     Furthermore, we show how any given method to compute a sequence of moves
     from a given position to the normal end position can easily be extended to
