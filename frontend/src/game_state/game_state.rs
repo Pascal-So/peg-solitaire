@@ -115,9 +115,9 @@ impl Reducible for GameState {
                         if self.arrangement.is_occupied(coord) {
                             let mut state = (*self).clone();
                             state.selection = Some(coord);
-                            return state.into();
+                            state.into()
                         } else {
-                            return self;
+                            self
                         }
                     }
                     Some(selected_coord) => {

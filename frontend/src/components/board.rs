@@ -62,14 +62,18 @@ pub fn Board(
     let undo = {
         let undo = undo.clone();
         move |_| {
-            undo.as_ref().map(|cb| cb.emit(()));
+            if let Some(undo) = undo.as_ref() {
+                undo.emit(());
+            }
         }
     };
     let can_redo = redo.is_some();
     let redo = {
         let redo = redo.clone();
         move |_| {
-            redo.as_ref().map(|cb| cb.emit(()));
+            if let Some(redo) = redo.as_ref() {
+                redo.emit(());
+            }
         }
     };
     let toggle_edit_mode = {
@@ -124,7 +128,7 @@ pub fn Board(
                 />
             }}) }
 
-            { for pegs.into_iter().enumerate().map(|(i, p)| {
+            { for pegs.iter().enumerate().map(|(i, p)| {
                 let left = PX_HOLE_DISTANCE * (p.coord.x() as i16 + 3);
                 let top = PX_HOLE_DISTANCE * (p.coord.y() as i16 + 3);
                 html!{

@@ -15,7 +15,7 @@ use crate::components::timeline::Timeline;
 use crate::game_state::{GameAction, GameState, Mode};
 
 /// URL where the bloom filter .bin file will be downloaded from at runtime.
-const BLOOM_FILTER_URL: &'static str = match option_env!("BLOOM_FILTER_URL") {
+const BLOOM_FILTER_URL: &str = match option_env!("BLOOM_FILTER_URL") {
     Some(url) => url,
     None => "filter_502115651_1_norm.bin",
 };
@@ -227,13 +227,15 @@ fn App() -> Html {
         let bloom_filter = bloom_filter.clone();
         let wants_to_download_solver = wants_to_download_solver.clone();
         Callback::from(move |_| {
-            if !*solver_visible && *bloom_filter == BloomFilterResource::NotRequested {
-                if wants_to_download_solver.unwrap_or(false) {
-                    // If the user has chosen to download the solver last time,
-                    // then we assume that they also want to download it this
-                    // time once they open the solver menu.
-                    download_solver.emit(())
-                }
+            let opening_solver_menu = !*solver_visible;
+            let not_downloaded_yet = *bloom_filter == BloomFilterResource::NotRequested;
+            let has_previously_requested_download = wants_to_download_solver.unwrap_or(false);
+
+            if opening_solver_menu && not_downloaded_yet && has_previously_requested_download {
+                // If the user has chosen to download the solver last time,
+                // then we assume that they also want to download it this
+                // time once they open the solver menu.
+                download_solver.emit(())
             }
             solver_visible.set(!*solver_visible);
         })
