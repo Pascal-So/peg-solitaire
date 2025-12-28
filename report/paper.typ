@@ -1,10 +1,6 @@
 #import "template/jacow.typ": jacow
 
-// #set page(foreground: rotate(34deg,
-//   text(68pt, fill: rgb("22222231"))[
-//     *Work In Progress*
-//   ]
-// ))
+#set page(numbering: "1")
 
 #show: jacow.with(
   title: [Precomputing Peg Solitaire],
@@ -28,6 +24,7 @@
   ],
   date: [December 2025],
 )
+
 
 #place(footnote(numbering: it => "", [
   Source code available at
