@@ -43,30 +43,30 @@ impl PartialEq for BloomFilterResource {
 fn App() -> Html {
     let b2f = |b: bool| if b { 1.0 } else { 0.0 };
 
-    let has_made_first_move = use_local_storage::<bool>("has_made_first_move".to_string());
+    let has_previously_made_first_move =
+        use_local_storage::<bool>("has_made_first_move".to_string());
     let wants_to_download_solver =
         use_local_storage::<bool>("wants_to_download_solver".to_string());
-    let game_state = use_reducer({
-        // In local storage we store if the player has ever made a move yet, and
-        // if so, we display the controls right from the start rather than only
-        // showing them once the player again makes their first move in this
-        // current session.
-        let has_made_first_move = has_made_first_move.unwrap_or(false);
-        move || GameState::new().with_first_move(has_made_first_move)
-    });
-    let display_scale = use_state(|| 1.0);
-    let bloom_filter = use_state(|| BloomFilterResource::NotRequested);
+    let game_state = use_reducer(move || GameState::new());
+    let display_scale = use_state_eq(|| 1.0);
+    let bloom_filter = use_state_eq(|| BloomFilterResource::NotRequested);
     let div_ref = use_node_ref();
-    let solver_visible = use_state(|| false);
-    let scroll_target = use_state(|| None);
+    let solver_visible = use_state_eq(|| false);
+    let scroll_target = use_state_eq(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
+    let enable_glow = use_state_eq(|| false);
 
-    use_effect_with((game_state.clone(), has_made_first_move), {
-        move |(game_state, has_made_first_move)| {
-            if !has_made_first_move.unwrap_or(false) && game_state.has_made_first_move() {
-                // Store the fact that the player has now made their first
-                // move in local storage.
-                has_made_first_move.set(true);
+    use_effect_with(
+        (game_state.clone(), has_previously_made_first_move.clone()),
+        {
+            move |(game_state, has_previously_made_first_move)| {
+                if !has_previously_made_first_move.unwrap_or(false)
+                    && game_state.has_made_first_move()
+                {
+                    // Store the fact that the player has now made their first
+                    // move in local storage.
+                    has_previously_made_first_move.set(true);
+                }
             }
         }
     });
@@ -245,10 +245,13 @@ fn App() -> Html {
 
     let current_nr_pegs = game_state.nr_pegs();
 
+    let show_board_ui_buttons =
+        game_state.has_made_first_move() || has_previously_made_first_move.unwrap_or(false);
+
     html! {
         <div ref={div_ref} class="scaling-container" style={format!("transform: scale({})", *display_scale)}>
             <Board
-                has_made_first_move={game_state.has_made_first_move()}
+                show_ui_buttons={show_board_ui_buttons}
                 edit_mode={edit_mode}
                 selected={game_state.selected_coord()}
                 reset={reset}

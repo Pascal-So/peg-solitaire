@@ -8,7 +8,7 @@ const PX_HOLE_DISTANCE: i16 = 34;
 
 #[derive(Properties, PartialEq)]
 pub struct BoardProps {
-    pub has_made_first_move: bool,
+    pub show_ui_buttons: bool,
     pub edit_mode: bool,
     pub selected: Option<Coord>,
     pub reset: Callback<()>,
@@ -24,7 +24,7 @@ pub struct BoardProps {
 #[function_component]
 pub fn Board(
     BoardProps {
-        has_made_first_move,
+        show_ui_buttons,
         edit_mode,
         selected,
         reset,
@@ -107,14 +107,14 @@ pub fn Board(
             </button>
 
             <button
-                style={format!("grid-row: 1; grid-column: 6/8; opacity: {};", b2f(*has_made_first_move))}
+                style={format!("grid-row: 1; grid-column: 6/8; opacity: {};", b2f(*show_ui_buttons))}
                 onclick={toggle_edit_mode}
             >
                 {if *edit_mode {"done"} else {"edit"}}
             </button>
 
             <button
-                style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(*has_made_first_move))}
+                style={format!("grid-row: 7; grid-column: 6/8; opacity: {};", b2f(*show_ui_buttons))}
                 onclick={toggle_solver}
             >
                 {"solver"}
