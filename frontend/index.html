@@ -45,6 +45,8 @@ body {
     width: 30px;
     background-color: #3c3c3c;
     border-radius: 50%;
+    border: 2.5px solid #3c3c3c;
+    transition: border-color 0.2s linear;
 }
 
 .icon {
@@ -81,21 +83,21 @@ button {
 }
 
 @keyframes pulsate {
-    0% { background-color: #3c3c3c; }
-    30% { background-color: #555; }
-    100% { background-color: #3c3c3c; }
+    0% { border-color: #3c3c3c; }
+    25% { border-color: #867; }
+    100% { border-color: #3c3c3c; }
 }
 
 .selected {
-    border: 3px solid #7d79fb;
+    border-color: #7d79fb;
 }
 
-.flash {
-    animation: pulsate 0.2s;
+.tutorial-glow {
+    animation: pulsate 1.5s infinite;
 }
 
 .edit-mode .game-cell {
-    border: 2.2px solid #3b603a;
+    border-color: #3b603a;
 }
 
 .timeline-segment {

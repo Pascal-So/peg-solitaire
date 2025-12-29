@@ -3,6 +3,7 @@ mod game_state;
 
 use std::rc::Rc;
 
+use common::Position;
 use common::{BloomFilter, coord::Coord};
 use gloo_net::http::Request;
 use gloo_timers::future::TimeoutFuture;
@@ -54,7 +55,7 @@ fn App() -> Html {
     let solver_visible = use_state_eq(|| false);
     let scroll_target = use_state_eq(|| None);
     let scroll_command_id = use_mut_ref(|| 0u64);
-    let enable_glow = use_state_eq(|| false);
+    let enable_tutorial_glow = use_state_eq(|| false);
 
     use_effect_with(
         (game_state.clone(), has_previously_made_first_move.clone()),
@@ -68,6 +69,34 @@ fn App() -> Html {
                     has_previously_made_first_move.set(true);
                 }
             }
+        },
+    );
+
+    // Mirror the value of game_state.has_made_first_move() to a mutable cache
+    // so that we can check the latest value from the timeout future.
+    let has_made_first_move_cache = use_mut_ref(|| false);
+    use_effect_with((game_state.clone(), enable_tutorial_glow.clone()), {
+        move |(game_state, enable_tutorial_glow)| {
+            *has_made_first_move_cache.borrow_mut() = game_state.has_made_first_move();
+            if game_state.has_made_first_move() {
+                // stop glowing after a move has been made
+                enable_tutorial_glow.set(false);
+                return;
+            }
+
+            let enable_tutorial_glow = enable_tutorial_glow.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                TimeoutFuture::new(6_000).await;
+                if *has_made_first_move_cache.borrow() {
+                    return;
+                }
+
+                // If the user hasn't made a move for a while after opening up
+                // the app, we assume that the user doesn't know how to play the
+                // game and thus we show a tutorial by glowing the movable
+                // pieces.
+                enable_tutorial_glow.set(true);
+            });
         }
     });
 
@@ -248,6 +277,8 @@ fn App() -> Html {
     let show_board_ui_buttons =
         game_state.has_made_first_move() || has_previously_made_first_move.unwrap_or(false);
 
+    let is_at_default_position = game_state.as_position() == Position::default_start();
+
     html! {
         <div ref={div_ref} class="scaling-container" style={format!("transform: scale({})", *display_scale)}>
             <Board
@@ -261,6 +292,7 @@ fn App() -> Html {
                 toggle_solver={toggle_solver}
                 toggle_edit_mode={edit}
                 pegs={game_state.pegs()}
+                tutorial_glow={*enable_tutorial_glow && !edit_mode && is_at_default_position}
             />
 
             <div class="solver-box" style={format!("opacity: {};", b2f(*solver_visible))}>

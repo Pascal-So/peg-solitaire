@@ -1,5 +1,11 @@
 # Changelog
 
+## 2025-12-29
+
+### User Visible
+
+* Add tutorial glow effect to subtly teach the game to new users.
+
 ## 2025-12-28
 
 ### User Visible

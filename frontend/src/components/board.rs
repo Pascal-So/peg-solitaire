@@ -18,6 +18,9 @@ pub struct BoardProps {
     pub toggle_solver: Callback<()>,
     pub toggle_edit_mode: Callback<()>,
     pub pegs: [Peg; NR_HOLES],
+
+    /// Show a glow on movable pieces to teach the user how to play the game
+    pub tutorial_glow: bool,
 }
 
 /// Render the game board with pegs and holes, plus some surrounding buttons.
@@ -34,25 +37,9 @@ pub fn Board(
         toggle_solver,
         toggle_edit_mode,
         pegs,
+        tutorial_glow,
     }: &BoardProps,
 ) -> Html {
-    let cell_classes = {
-        move |coord: Coord| {
-            let mut classes = Classes::new();
-            classes.push("game-cell");
-            if *selected == Some(coord) && !edit_mode {
-                classes.push("selected");
-            }
-            classes
-        }
-    };
-
-    let mut overall_classes = Classes::new();
-    overall_classes.push("game-grid");
-    if *edit_mode {
-        overall_classes.push("edit-mode");
-    }
-
     let holeclick = holeclick.clone();
     let reset = {
         let reset = reset.clone();
@@ -85,8 +72,38 @@ pub fn Board(
         move |_| toggle_solver.emit(())
     };
 
+    let mut glow_outer_pieces = false;
+    let mut glow_central_piece = false;
+    if *tutorial_glow {
+        // Is one of the four pegs selected that can be moved to
+        // the middle in the first move?
+        let movable_peg_selected = selected.map_or(false, is_firstjump_peg);
+
+        if movable_peg_selected {
+            // If so, highlight the centre to show the player
+            // where the peg can be moved to.
+            glow_central_piece = true;
+        } else {
+            glow_outer_pieces = true;
+        }
+    }
+
+    let cell_classes = {
+        move |coord: Coord| {
+            let is_selected = *selected == Some(coord) && !edit_mode;
+            let is_tutorial_glowing = glow_central_piece && coord == Coord::center()
+                || glow_outer_pieces && is_firstjump_peg(coord);
+
+            classes!(
+                "game-cell",
+                is_selected.then_some("selected"),
+                is_tutorial_glowing.then_some("tutorial-glow")
+            )
+        }
+    };
+
     html! {
-        <div class={overall_classes}>
+        <div class={classes!("game-grid", edit_mode.then_some("edit-mode"))}>
             <button
                 style={format!("grid-row: 1; grid-column: 1/3; opacity: {};", b2f(can_undo || *edit_mode))}
                 onclick={reset}
@@ -141,4 +158,10 @@ pub fn Board(
             }) }
         </div>
     }
+}
+
+/// Is this one of the four coordinates of the pegs that can
+/// be moved to the centre in the first move?
+fn is_firstjump_peg(coord: Coord) -> bool {
+    coord.x() == 0 && coord.y().abs() == 2 || coord.x().abs() == 2 && coord.y() == 0
 }
